@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Bunde</string>
+    <string name="tagline">AI-Powered Personal Learning</string>
+    <string name="greeting_question">What are we learning today?</string>
+    <string name="action_upload_notes">Upload Notes</string>
+    <string name="action_upload_notes_desc">Scan handwritten or printed school notes</string>
+    <string name="action_enter_topic">Enter a Topic</string>
+    <string name="action_enter_topic_desc">Explore any subject, class, or curriculum</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_my_learning">My Learning</string>
+    <string name="nav_revision">Revision</string>
+    <string name="nav_profile">Profile</string>
+</resources>

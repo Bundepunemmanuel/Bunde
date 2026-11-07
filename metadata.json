@@ -1,0 +1,6 @@
+{
+  "name": "Bunde",
+  "description": "Bunde is an AI-powered personal learning native Android application built with Kotlin and Jetpack Compose to help students master school topics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

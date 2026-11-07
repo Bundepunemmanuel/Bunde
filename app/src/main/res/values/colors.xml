@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bunde_background">#F2EEE4</color>
+    <color name="bunde_text_primary">#242321</color>
+    <color name="bunde_text_secondary">#77736D</color>
+    <color name="bunde_accent">#C0584A</color>
+    <color name="bunde_accent_light">#F8EAE8</color>
+    <color name="bunde_card">#FFFFFF</color>
+    <color name="bunde_border">#E2DDD3</color>
+    <color name="bunde_accent_dark">#9C3E32</color>
+</resources>
