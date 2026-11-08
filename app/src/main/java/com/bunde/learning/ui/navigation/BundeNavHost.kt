@@ -24,6 +24,8 @@ import com.bunde.learning.ui.screens.profile.ProfileScreen
 import com.bunde.learning.ui.screens.revision.RevisionScreen
 import com.bunde.learning.ui.screens.topic.EnterTopicScreen
 import com.bunde.learning.ui.screens.topic.TopicReviewScreen
+import com.bunde.learning.ui.screens.tutor.InteractiveTutorScreen
+import com.bunde.learning.ui.screens.tutor.InteractiveTutorViewModel
 import com.bunde.learning.ui.screens.upload.UploadNotesScreen
 import com.bunde.learning.ui.theme.BundeBackground
 
@@ -86,7 +88,7 @@ fun BundeNavHost(
                     onUploadNotesClick = { navController.navigate(Screen.UploadNotes.route) },
                     onEnterTopicClick = { navController.navigate(Screen.EnterTopic.route) },
                     onContinueLearningClick = { topicId ->
-                        navController.navigate(Screen.TopicReview.createRoute(topicId))
+                        navController.navigate(Screen.InteractiveTutor.createRoute(topicId))
                     },
                     onMyLearningClick = { navController.navigate(Screen.MyLearning.route) },
                     onRevisionClick = { navController.navigate(Screen.Revision.route) },
@@ -98,7 +100,7 @@ fun BundeNavHost(
                 MyLearningScreen(
                     viewModel = homeViewModel,
                     onTopicClick = { topicId ->
-                        navController.navigate(Screen.TopicReview.createRoute(topicId))
+                        navController.navigate(Screen.InteractiveTutor.createRoute(topicId))
                     }
                 )
             }
@@ -107,7 +109,7 @@ fun BundeNavHost(
                 RevisionScreen(
                     viewModel = homeViewModel,
                     onStartRecallSession = {
-                        // Recall session
+                        // Spaced retrieval recall session
                     }
                 )
             }
@@ -148,6 +150,27 @@ fun BundeNavHost(
                 TopicReviewScreen(
                     topicId = topicId,
                     onBackToHome = {
+                        navController.popBackStack(Screen.Home.route, false)
+                    },
+                    onStartLesson = { tid ->
+                        navController.navigate(Screen.InteractiveTutor.createRoute(tid)) {
+                            popUpTo(Screen.Home.route)
+                        }
+                    }
+                )
+            }
+
+            composable(
+                route = Screen.InteractiveTutor.route,
+                arguments = listOf(navArgument("topicId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val topicId = backStackEntry.arguments?.getString("topicId") ?: ""
+                val tutorViewModel: InteractiveTutorViewModel = viewModel()
+                InteractiveTutorScreen(
+                    topicId = topicId,
+                    viewModel = tutorViewModel,
+                    onBackClick = {
+                        homeViewModel.loadData()
                         navController.popBackStack(Screen.Home.route, false)
                     }
                 )

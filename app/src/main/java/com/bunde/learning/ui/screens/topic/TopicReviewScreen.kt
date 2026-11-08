@@ -30,6 +30,7 @@ import kotlinx.coroutines.launch
 fun TopicReviewScreen(
     topicId: String,
     onBackToHome: () -> Unit,
+    onStartLesson: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -196,7 +197,7 @@ fun TopicReviewScreen(
 
                 BundePrimaryButton(
                     text = "Start Interactive Lesson",
-                    onClick = onBackToHome
+                    onClick = { onStartLesson(map.topicId) }
                 )
             }
         }
