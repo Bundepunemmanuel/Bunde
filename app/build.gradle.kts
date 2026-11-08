@@ -108,6 +108,9 @@ dependencies {
     // Network & Gemini HTTP Client
     implementation(libs.okhttp)
 
+    // Image loading for Compose
+    implementation(libs.coil.compose)
+
     // Tooling for debug
     debugImplementation(libs.androidx.ui.tooling)
 }

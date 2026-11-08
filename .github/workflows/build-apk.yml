@@ -32,7 +32,10 @@ jobs:
 
       - name: Accept Android SDK Licenses
         run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          SDKMANAGER=$(find $ANDROID_HOME -name sdkmanager 2>/dev/null | head -n 1)
+          if [ -n "$SDKMANAGER" ]; then
+            yes | "$SDKMANAGER" --licenses || true
+          fi
 
       - name: Build Debug APK with Gradle
         run: ./gradlew assembleDebug --stacktrace --no-daemon
