@@ -12,8 +12,8 @@ android {
         applicationId = "com.bunde.learning"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -22,6 +22,15 @@ android {
     }
 
     signingConfigs {
+        getByName("debug") {
+            val debugKeystore = file("bunde-debug.keystore")
+            if (debugKeystore.exists()) {
+                storeFile = debugKeystore
+                storePassword = "bundelearningsecure"
+                keyAlias = "bundeKey"
+                keyPassword = "bundelearningsecure"
+            }
+        }
         create("release") {
             val releaseKeystore = file("bunde-release.keystore")
             if (releaseKeystore.exists()) {
