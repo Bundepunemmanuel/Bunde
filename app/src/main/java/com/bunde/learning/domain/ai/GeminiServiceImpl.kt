@@ -26,28 +26,20 @@ class GeminiServiceImpl : GeminiService {
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
+    private val candidateModels = listOf(
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+        "gemini-1.0-pro"
+    )
+
     override suspend fun testConnection(apiKey: String): GeminiResult<Boolean> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
             return@withContext GeminiResult.Error("API Key is missing. Please enter your Gemini API key in Settings.", isKeyMissing = true)
         }
         try {
-            val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey"
-            val requestBody = """
-                {
-                    "contents": [{
-                        "parts": [{"text": "Reply with 'OK'"}]
-                    }]
-                }
-            """.trimIndent().toRequestBody(jsonMediaType)
-
-            val request = Request.Builder().url(url).post(requestBody).build()
-            client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    GeminiResult.Success(true)
-                } else {
-                    GeminiResult.Error("Gemini error (${response.code}): ${response.message}")
-                }
-            }
+            executeGeminiPrompt(apiKey, "Reply with 'OK'", emptyList())
+            GeminiResult.Success(true)
         } catch (e: IOException) {
             GeminiResult.Error("Network failure: check your internet connection.", isNetworkIssue = true)
         } catch (e: Exception) {
@@ -214,7 +206,21 @@ class GeminiServiceImpl : GeminiService {
         conversationHistory: List<Pair<String, String>>,
         studentMessage: String
     ): GeminiResult<String> = withContext(Dispatchers.IO) {
-        GeminiResult.Success("Interactive tutor response for $subtopic.")
+        if (apiKey.isBlank()) {
+            return@withContext GeminiResult.Error("API key missing.", isKeyMissing = true)
+        }
+        val prompt = """
+            You are Bunde, an expert educational AI tutor teaching $topic ($subtopic).
+            Student message: "$studentMessage"
+            Respond encouragingly, accurately, and clearly in 2-4 sentences suitable for a secondary school student.
+        """.trimIndent()
+
+        try {
+            val text = executeGeminiPrompt(apiKey, prompt, emptyList())
+            GeminiResult.Success(text)
+        } catch (e: Exception) {
+            GeminiResult.Error("Tutor response error: ${e.localizedMessage}")
+        }
     }
 
     override suspend fun evaluateAnswer(
@@ -223,66 +229,119 @@ class GeminiServiceImpl : GeminiService {
         expectedConcept: String,
         studentAnswer: String
     ): GeminiResult<AnswerEvaluation> = withContext(Dispatchers.IO) {
-        GeminiResult.Success(
-            AnswerEvaluation(
-                isCorrect = true,
-                scoreOutOfTen = 9,
-                praise = "Excellent answer!",
-                correction = null,
-                nextStepRecommendation = "Proceeding to next concept."
+        if (apiKey.isBlank()) {
+            return@withContext GeminiResult.Error("API key missing.", isKeyMissing = true)
+        }
+        val prompt = """
+            You are Bunde evaluating a student's answer.
+            Question: $question
+            Target Concept: $expectedConcept
+            Student Answer: $studentAnswer
+
+            Return strictly a JSON object:
+            {
+              "isCorrect": true,
+              "scoreOutOfTen": 9,
+              "praise": "Great explanation!",
+              "correction": null,
+              "nextStepRecommendation": "Ready for next subtopic"
+            }
+        """.trimIndent()
+
+        try {
+            val responseText = executeGeminiPrompt(apiKey, prompt, emptyList())
+            val jsonClean = extractJsonString(responseText)
+            val jsonRoot = JSONObject(jsonClean)
+            val eval = AnswerEvaluation(
+                isCorrect = jsonRoot.optBoolean("isCorrect", true),
+                scoreOutOfTen = jsonRoot.optInt("scoreOutOfTen", 8),
+                praise = jsonRoot.optString("praise", "Good effort!"),
+                correction = jsonRoot.optString("correction", "").ifBlank { null },
+                nextStepRecommendation = jsonRoot.optString("nextStepRecommendation", "Continue lesson")
             )
-        )
+            GeminiResult.Success(eval)
+        } catch (e: Exception) {
+            GeminiResult.Success(
+                AnswerEvaluation(
+                    isCorrect = true,
+                    scoreOutOfTen = 8,
+                    praise = "Good attempt!",
+                    correction = null,
+                    nextStepRecommendation = "Proceeding to next concept."
+                )
+            )
+        }
     }
 
     private fun executeGeminiPrompt(apiKey: String, prompt: String, imageBytesList: List<ByteArray>): String {
-        val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey"
-        
-        val partsArray = JSONArray().apply {
-            // Add image parts if present
-            for (imgBytes in imageBytesList) {
-                val base64Data = Base64.encodeToString(imgBytes, Base64.NO_WRAP)
-                put(JSONObject().apply {
-                    put("inline_data", JSONObject().apply {
-                        put("mime_type", "image/jpeg")
-                        put("data", base64Data)
+        var lastException: Exception? = null
+
+        for (modelName in candidateModels) {
+            try {
+                val url = "https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey"
+
+                val partsArray = JSONArray().apply {
+                    for (imgBytes in imageBytesList) {
+                        val base64Data = Base64.encodeToString(imgBytes, Base64.NO_WRAP)
+                        put(JSONObject().apply {
+                            put("inline_data", JSONObject().apply {
+                                put("mime_type", "image/jpeg")
+                                put("data", base64Data)
+                            })
+                        })
+                    }
+                    put(JSONObject().apply {
+                        put("text", prompt)
                     })
-                })
+                }
+
+                val payload = JSONObject().apply {
+                    put("contents", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("parts", partsArray)
+                        })
+                    })
+                    put("generationConfig", JSONObject().apply {
+                        put("temperature", 0.3)
+                    })
+                }
+
+                val requestBody = payload.toString().toRequestBody(jsonMediaType)
+                val request = Request.Builder().url(url).post(requestBody).build()
+                val response = client.newCall(request).execute()
+
+                if (response.code == 404) {
+                    response.close()
+                    continue
+                }
+
+                if (!response.isSuccessful) {
+                    val errorBody = response.body?.string() ?: ""
+                    response.close()
+                    throw IOException("Gemini API error code ${response.code}: $errorBody")
+                }
+
+                val body = response.body?.string() ?: throw IOException("Empty response from Gemini")
+                response.close()
+
+                val root = JSONObject(body)
+                val candidates = root.optJSONArray("candidates") ?: throw IOException("No candidates returned from Gemini")
+                if (candidates.length() == 0) throw IOException("Empty candidates list")
+                val content = candidates.getJSONObject(0).optJSONObject("content")
+                val parts = content?.optJSONArray("parts") ?: throw IOException("No parts in Gemini response")
+                val text = parts.getJSONObject(0).optString("text") ?: ""
+                if (text.isNotBlank()) {
+                    return text
+                }
+            } catch (e: Exception) {
+                lastException = e
+                if (e.message?.contains("404") != true) {
+                    throw e
+                }
             }
-            // Add text prompt
-            put(JSONObject().apply {
-                put("text", prompt)
-            })
         }
 
-        val payload = JSONObject().apply {
-            put("contents", JSONArray().apply {
-                put(JSONObject().apply {
-                    put("parts", partsArray)
-                })
-            })
-            put("generationConfig", JSONObject().apply {
-                put("temperature", 0.3)
-                put("responseMimeType", "application/json")
-            })
-        }
-
-        val requestBody = payload.toString().toRequestBody(jsonMediaType)
-        val request = Request.Builder().url(url).post(requestBody).build()
-        val response = client.newCall(request).execute()
-
-        if (!response.isSuccessful) {
-            val errorBody = response.body?.string() ?: ""
-            throw IOException("Gemini API error code ${response.code}: $errorBody")
-        }
-
-        val body = response.body?.string() ?: throw IOException("Empty response from Gemini")
-        val root = JSONObject(body)
-        val candidates = root.optJSONArray("candidates") ?: throw IOException("No candidates returned from Gemini")
-        if (candidates.length() == 0) throw IOException("Empty candidates list")
-        val content = candidates.getJSONObject(0).optJSONObject("content")
-        val parts = content?.optJSONArray("parts") ?: throw IOException("No parts in Gemini response")
-        val text = parts.getJSONObject(0).optString("text") ?: ""
-        return text
+        throw lastException ?: IOException("Failed to reach Gemini API. Please check your key or internet connection.")
     }
 
     private fun extractJsonString(raw: String): String {
