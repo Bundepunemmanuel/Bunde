@@ -85,4 +85,24 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
+    fun processRecallResult(item: RevisionItem, confidenceRating: Int) {
+        viewModelScope.launch {
+            val (nextInterval, isWeak) = when (confidenceRating) {
+                1 -> Pair(1, true)
+                2 -> Pair(3, false)
+                3 -> Pair(7, false)
+                else -> Pair(14, false)
+            }
+
+            val updated = item.copy(
+                intervalDays = nextInterval,
+                repetitionLevel = item.repetitionLevel + 1,
+                dueDate = System.currentTimeMillis() + (nextInterval * 24 * 60 * 60 * 1000L),
+                isWeakArea = isWeak
+            )
+
+            storage.updateRevisionItem(updated)
+        }
+    }
 }

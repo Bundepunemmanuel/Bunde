@@ -182,4 +182,16 @@ class LocalStorageManager(private val context: Context) {
         } catch (_: Exception) {}
         null
     }
+
+    suspend fun updateRevisionItem(updated: RevisionItem) = withContext(Dispatchers.IO) {
+        val current = _revisionItems.value.toMutableList()
+        val index = current.indexOfFirst { it.id == updated.id }
+        if (index != -1) {
+            current[index] = updated
+        } else {
+            current.add(updated)
+        }
+        _revisionItems.value = current
+        saveRevisionToFile(current)
+    }
 }
