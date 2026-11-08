@@ -178,7 +178,7 @@ fun UploadNotesScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .border(1.dp, BundeBorder, RoundedCornerShape(12.dp), true)
+                    .border(1.dp, BundeBorder, RoundedCornerShape(12.dp))
                     .background(BundeSurface),
                 contentAlignment = Alignment.Center
             ) {

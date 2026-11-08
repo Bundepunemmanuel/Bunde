@@ -91,7 +91,7 @@ fun BundeBottomNavigation(
                                 onNavigate(item.route)
                             }
                         },
-                    horizontalAlignment = Alignment.CenterVertically,
+                    horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
                     Icon(
