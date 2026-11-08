@@ -11,6 +11,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build Native Debug APK
@@ -55,3 +58,14 @@ jobs:
           name: bunde-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
+
+      - name: Publish Direct APK to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: v1.0.0
+          name: "Bunde Native Android v1.0.0"
+          body: "Direct `.apk` file download for Bunde (Native Android Jetpack Compose App)."
+          files: app/build/outputs/apk/debug/app-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
