@@ -27,7 +27,7 @@ android {
             if (debugKeystore.exists()) {
                 storeFile = debugKeystore
                 storePassword = "bundelearningsecure"
-                keyAlias = "bundeKey"
+                keyAlias = "bundedebugkey"
                 keyPassword = "bundelearningsecure"
             }
         }
@@ -36,7 +36,7 @@ android {
             if (releaseKeystore.exists()) {
                 storeFile = releaseKeystore
                 storePassword = "bundelearningsecure"
-                keyAlias = "bundeKey"
+                keyAlias = "bundekey"
                 keyPassword = "bundelearningsecure"
             }
         }
