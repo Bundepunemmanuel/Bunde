@@ -23,16 +23,13 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file("bunde-release.keystore")
-            storePassword = "bundelearningsecure"
-            keyAlias = "bundeKey"
-            keyPassword = "bundelearningsecure"
-        }
-        getByName("debug") {
-            storeFile = file("bunde-debug.keystore")
-            storePassword = "bundelearningsecure"
-            keyAlias = "bundeDebugKey"
-            keyPassword = "bundelearningsecure"
+            val releaseKeystore = file("bunde-release.keystore")
+            if (releaseKeystore.exists()) {
+                storeFile = releaseKeystore
+                storePassword = "bundelearningsecure"
+                keyAlias = "bundeKey"
+                keyPassword = "bundelearningsecure"
+            }
         }
     }
 
@@ -44,7 +41,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release")
+            val releaseKeystore = file("bunde-release.keystore")
+            if (releaseKeystore.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            } else {
+                signingConfig = signingConfigs.getByName("debug")
+            }
         }
         debug {
             applicationIdSuffix = ""

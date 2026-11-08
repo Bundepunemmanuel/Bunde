@@ -32,22 +32,19 @@ jobs:
 
       - name: Accept Android SDK Licenses
         run: |
-          SDKMANAGER=$(find $ANDROID_HOME -name sdkmanager 2>/dev/null | head -n 1)
-          if [ -n "$SDKMANAGER" ]; then
-            yes | "$SDKMANAGER" --licenses || true
-          fi
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || yes | $ANDROID_HOME/tools/bin/sdkmanager --licenses 2>/dev/null || true
 
       - name: Build Debug APK with Gradle
         run: ./gradlew assembleDebug --stacktrace --no-daemon
 
-      - name: Verify APK exists
+      - name: Verify Debug APK exists
         run: |
           APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
           if [ -f "$APK_PATH" ]; then
-            echo "✅ Verified: APK successfully built at $APK_PATH"
+            echo "✅ Verified: Debug APK successfully built at $APK_PATH"
             ls -lh "$APK_PATH"
           else
-            echo "❌ Error: APK not found at $APK_PATH"
+            echo "❌ Error: Debug APK not found at $APK_PATH"
             find app/build -name "*.apk" || true
             exit 1
           fi
