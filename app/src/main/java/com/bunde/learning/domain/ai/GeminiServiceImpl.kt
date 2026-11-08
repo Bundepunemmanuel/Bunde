@@ -27,10 +27,12 @@ class GeminiServiceImpl : GeminiService {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     private val candidateModels = listOf(
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-1.5-pro",
-        "gemini-1.0-pro"
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-3.8-flash",
+        "gemini-flash-latest",
+        "gemini-2.5-flash",
+        "gemini-1.5-flash"
     )
 
     override suspend fun testConnection(apiKey: String): GeminiResult<Boolean> = withContext(Dispatchers.IO) {
@@ -310,15 +312,16 @@ class GeminiServiceImpl : GeminiService {
                 val request = Request.Builder().url(url).post(requestBody).build()
                 val response = client.newCall(request).execute()
 
-                if (response.code == 404) {
-                    response.close()
-                    continue
-                }
-
                 if (!response.isSuccessful) {
                     val errorBody = response.body?.string() ?: ""
                     response.close()
-                    throw IOException("Gemini API error code ${response.code}: $errorBody")
+                    val ex = IOException("Gemini API error code ${response.code}: $errorBody")
+                    lastException = ex
+                    if (response.code == 404) {
+                        continue
+                    } else {
+                        throw ex
+                    }
                 }
 
                 val body = response.body?.string() ?: throw IOException("Empty response from Gemini")
