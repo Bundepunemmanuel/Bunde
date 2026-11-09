@@ -141,21 +141,39 @@ fun InteractiveTutorScreen(
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = eval.correction!!,
-                                fontSize = 12.sp,
+                                fontSize = 13.sp,
                                 color = BundeTextSecondary
                             )
                         }
+                        if (eval.hint != null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "💡 Hint: ${eval.hint!!}",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = BundeHighlight
+                            )
+                        }
                         Spacer(modifier = Modifier.height(10.dp))
-                        BundePrimaryButton(
-                            text = if (state.isLessonCompleted) "Finish Lesson" else "Next Concept",
-                            onClick = {
-                                if (state.isLessonCompleted) {
-                                    onBackClick()
-                                } else {
-                                    viewModel.nextSubtopic()
+                        if (eval.isCorrect || !eval.allowsRetry) {
+                            BundePrimaryButton(
+                                text = if (state.isLessonCompleted) "Finish Lesson" else "Next Concept",
+                                onClick = {
+                                    if (state.isLessonCompleted) {
+                                        onBackClick()
+                                    } else {
+                                        viewModel.nextSubtopic()
+                                    }
                                 }
-                            }
-                        )
+                            )
+                        } else {
+                            Text(
+                                text = "Try typing another answer below with the hint, or ask a question anytime!",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = BundeTextSecondary
+                            )
+                        }
                     }
                 }
             }
