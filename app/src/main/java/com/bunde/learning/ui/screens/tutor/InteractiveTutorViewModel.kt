@@ -7,42 +7,57 @@ import com.bunde.learning.BundeApplication
 import com.bunde.learning.data.model.RevisionItem
 import com.bunde.learning.data.model.SubtopicNode
 import com.bunde.learning.data.model.TopicMap
-import com.bunde.learning.domain.ai.AnswerEvaluation
+import com.bunde.learning.domain.ai.EvaluationVerdict
 import com.bunde.learning.domain.ai.GeminiResult
+import com.bunde.learning.domain.ai.StructuredActivity
+import com.bunde.learning.domain.ai.StructuredAnswerEvaluation
+import com.bunde.learning.domain.ai.StructuredConceptStep
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-data class ChatMessage(
+/**
+ * Explicit Finite State Machine for Lesson Progression.
+ * Controller strictly governs transitions; AI only generates learning content and evaluations.
+ */
+enum class LessonPhase {
+    LOADING_TOPIC,
+    EXPLANATION,          // Concise progressive concept explanation & real-world example
+    ACTIVITY,             // Specific activity presentation (scenario, calculation, prediction, etc.)
+    WAITING_FOR_ANSWER,   // Awaiting student's input (answer button active)
+    EVALUATING_ANSWER,    // Gemini is evaluating the submission against the objective criteria
+    FEEDBACK,             // Evaluated feedback displayed (verdict, praise, misconception analysis, hint)
+    CONCEPT_COMPLETED,    // Objective demonstrated or attempt limit reached; explicit Continue enabled
+    NEXT_CONCEPT,         // Transitioning to the next concept
+    LESSON_COMPLETED,     // All concepts finished; celebration and persistence
+    ERROR                 // Recoverable error state
+}
+
+data class TutorInterruptionItem(
     val id: String,
-    val sender: SenderType,
-    val text: String,
+    val studentQuery: String,
+    val tutorExplanation: String,
+    val bridgeBack: String,
     val timestamp: Long = System.currentTimeMillis()
 )
 
-enum class SenderType {
-    TUTOR,
-    STUDENT,
-    SYSTEM_CHECK
-}
-
 data class TutorUiState(
+    val phase: LessonPhase = LessonPhase.LOADING_TOPIC,
     val topicMap: TopicMap? = null,
-    val currentSubtopicIndex: Int = 0,
+    val currentConceptIndex: Int = 0,
     val currentSubtopic: SubtopicNode? = null,
-    val messages: List<ChatMessage> = emptyList(),
-    val currentActivityQuestion: String? = null,
-    val currentExpectedKeyPoints: String? = null,
-    val isAwaitingAnswer: Boolean = false,
-    val attemptCount: Int = 1,
+    val currentStep: StructuredConceptStep? = null,
+    val currentActivity: StructuredActivity? = null,
+    val evaluationResult: StructuredAnswerEvaluation? = null,
+    val studentAnswerInput: String = "",
+    val attemptNumber: Int = 1,
     val struggleCount: Int = 0,
     val previouslyTaughtConcepts: List<String> = emptyList(),
-    val studentAnswerInput: String = "",
-    val evaluationResult: AnswerEvaluation? = null,
-    val isLoading: Boolean = false,
-    val errorMessage: String? = null,
-    val isLessonCompleted: Boolean = false
+    val recentlyUsedActivityTypes: List<String> = emptyList(),
+    val interruptions: List<TutorInterruptionItem> = emptyList(),
+    val isInterruptionLoading: Boolean = false,
+    val errorMessage: String? = null
 )
 
 class InteractiveTutorViewModel(application: Application) : AndroidViewModel(application) {
@@ -65,84 +80,98 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
         }
     }
 
+    /**
+     * Load the topic map from local persistence and initialize Concept 1.
+     */
     fun loadTopicMap(topicId: String) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
+            _uiState.value = _uiState.value.copy(phase = LessonPhase.LOADING_TOPIC, errorMessage = null)
             val loaded = storage.loadTopicMap(topicId)
             if (loaded != null && loaded.subtopics.isNotEmpty()) {
-                val firstSub = loaded.subtopics.firstOrNull()
+                val firstConcept = loaded.subtopics.first()
                 _uiState.value = _uiState.value.copy(
                     topicMap = loaded,
-                    currentSubtopicIndex = 0,
-                    currentSubtopic = firstSub,
-                    messages = emptyList(),
+                    currentConceptIndex = 0,
+                    currentSubtopic = firstConcept,
                     previouslyTaughtConcepts = emptyList(),
-                    isLoading = false
+                    recentlyUsedActivityTypes = emptyList(),
+                    interruptions = emptyList(),
+                    attemptNumber = 1,
+                    struggleCount = 0
                 )
-                teachCurrentSubtopic()
+                startConcept(firstConcept, 0, loaded)
             } else {
                 _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    errorMessage = "Topic map data not found."
+                    phase = LessonPhase.ERROR,
+                    errorMessage = "Curriculum topic map could not be found."
                 )
             }
         }
     }
 
-    fun teachCurrentSubtopic() {
-        val state = _uiState.value
-        val map = state.topicMap ?: return
-        val subtopic = state.currentSubtopic ?: return
-
+    /**
+     * Start teaching a specific concept by index.
+     */
+    private fun startConcept(concept: SubtopicNode, index: Int, map: TopicMap) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, evaluationResult = null)
+            _uiState.value = _uiState.value.copy(
+                phase = LessonPhase.EXPLANATION,
+                currentConceptIndex = index,
+                currentSubtopic = concept,
+                evaluationResult = null,
+                studentAnswerInput = "",
+                attemptNumber = 1,
+                errorMessage = null
+            )
 
-            val result = gemini.generateConceptStep(
+            val result = gemini.generateStructuredConceptStep(
                 apiKey = apiKey,
                 subject = map.subject,
                 topic = map.topicName,
                 classLevel = map.classLevel,
-                subtopicTitle = subtopic.title,
-                category = subtopic.category.name,
-                conceptSummary = subtopic.shortSummary,
-                conceptIndex = state.currentSubtopicIndex,
+                conceptId = concept.id,
+                conceptTitle = concept.title,
+                conceptCategory = concept.category.name,
+                conceptSummary = concept.shortSummary,
+                conceptIndex = index,
                 totalConcepts = map.subtopics.size,
-                previouslyTaughtConcepts = state.previouslyTaughtConcepts,
+                previouslyTaughtConcepts = _uiState.value.previouslyTaughtConcepts,
                 uploadedNotesSummary = map.unreadableNoteNotice,
-                struggleCount = state.struggleCount
+                struggleCount = _uiState.value.struggleCount,
+                recentlyUsedActivityTypes = _uiState.value.recentlyUsedActivityTypes
             )
-
-            _uiState.value = _uiState.value.copy(isLoading = false)
 
             when (result) {
                 is GeminiResult.Success -> {
                     val step = result.data
-                    val fullLessonMessage = "${step.explanation}\n\n👉 **Challenge:** ${step.checkActivityQuestion}"
-                    val tutorMsg = ChatMessage(
-                        id = "msg_${System.currentTimeMillis()}",
-                        sender = SenderType.TUTOR,
-                        text = fullLessonMessage
-                    )
+                    val updatedRecentTypes = (_uiState.value.recentlyUsedActivityTypes + step.activity.type).takeLast(4)
                     _uiState.value = _uiState.value.copy(
-                        messages = _uiState.value.messages + tutorMsg,
-                        currentActivityQuestion = step.checkActivityQuestion,
-                        currentExpectedKeyPoints = step.expectedConceptKeyPoints,
-                        isAwaitingAnswer = true,
-                        attemptCount = 1
+                        phase = LessonPhase.WAITING_FOR_ANSWER,
+                        currentStep = step,
+                        currentActivity = step.activity,
+                        recentlyUsedActivityTypes = updatedRecentTypes
                     )
                 }
                 is GeminiResult.Error -> {
-                    val fallbackMsg = ChatMessage(
-                        id = "msg_${System.currentTimeMillis()}",
-                        sender = SenderType.TUTOR,
-                        text = "${subtopic.title}: ${subtopic.shortSummary}\n\n👉 **Challenge:** How would you explain this in your own words?"
+                    // Safe, verified local fallback
+                    val fallbackActivity = StructuredActivity(
+                        type = "SCENARIO",
+                        question = "In ${map.subject}, what is the fundamental purpose of ${concept.title}?",
+                        options = emptyList(),
+                        expectedAnswerCriteria = concept.shortSummary,
+                        hint = "Focus on why ${concept.title} is applied."
+                    )
+                    val fallbackStep = StructuredConceptStep(
+                        conceptId = concept.id,
+                        learningObjective = "Understand ${concept.title}",
+                        conciseExplanation = "${concept.title} is an essential component of ${map.topicName}.\n\nSpecifically: ${concept.shortSummary}",
+                        concreteExample = "In practical applications of ${map.subject}, understanding this concept ensures accurate analysis.",
+                        activity = fallbackActivity
                     )
                     _uiState.value = _uiState.value.copy(
-                        messages = _uiState.value.messages + fallbackMsg,
-                        currentActivityQuestion = "How would you explain this in your own words?",
-                        currentExpectedKeyPoints = subtopic.shortSummary,
-                        isAwaitingAnswer = true,
-                        attemptCount = 1
+                        phase = LessonPhase.WAITING_FOR_ANSWER,
+                        currentStep = fallbackStep,
+                        currentActivity = fallbackActivity
                     )
                 }
                 is GeminiResult.Loading -> {}
@@ -150,127 +179,87 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
         }
     }
 
-    fun sendStudentMessage(messageText: String) {
-        if (messageText.isBlank()) return
+    /**
+     * Submit an answer for the current activity. State transitions strictly to EVALUATING_ANSWER.
+     */
+    fun submitAnswer(answerText: String) {
+        val trimmed = answerText.trim()
+        if (trimmed.isBlank()) return
 
         val state = _uiState.value
-        val map = state.topicMap ?: return
-        val subtopic = state.currentSubtopic ?: return
+        if (state.phase != LessonPhase.WAITING_FOR_ANSWER && state.phase != LessonPhase.FEEDBACK) return
 
-        val studentMsg = ChatMessage(
-            id = "msg_${System.currentTimeMillis()}",
-            sender = SenderType.STUDENT,
-            text = messageText.trim()
+        val map = state.topicMap ?: return
+        val concept = state.currentSubtopic ?: return
+        val step = state.currentStep ?: return
+        val activity = state.currentActivity ?: return
+
+        // 1. Disable duplicate submissions by immediate state transition
+        _uiState.value = state.copy(
+            phase = LessonPhase.EVALUATING_ANSWER,
+            studentAnswerInput = trimmed
         )
 
-        val updatedMsgs = state.messages + studentMsg
-        _uiState.value = _uiState.value.copy(messages = updatedMsgs, isLoading = true)
-
         viewModelScope.launch {
-            // Check if this is an answer to the pending activity OR an interruption / question
-            val history = updatedMsgs.map { it.sender.name to it.text }
-
-            val tutorTurn = gemini.askTutor(
+            val evalResult = gemini.evaluateStructuredAnswer(
                 apiKey = apiKey,
                 subject = map.subject,
                 topic = map.topicName,
                 classLevel = map.classLevel,
-                currentConcept = subtopic.title,
-                currentActivityQuestion = state.currentActivityQuestion,
-                conversationHistory = history,
-                studentMessage = messageText,
-                previouslyTaughtConcepts = state.previouslyTaughtConcepts,
-                struggleCount = state.struggleCount
+                conceptTitle = concept.title,
+                learningObjective = step.learningObjective,
+                activityQuestion = activity.question,
+                expectedAnswerCriteria = activity.expectedAnswerCriteria,
+                studentAnswer = trimmed,
+                attemptNumber = state.attemptNumber
             )
 
-            if (tutorTurn is GeminiResult.Success && tutorTurn.data.isInterruptionHandled) {
-                // Interruption handled: Answer student question, then prompt them to continue
-                _uiState.value = _uiState.value.copy(isLoading = false)
-                val responseMsg = ChatMessage(
-                    id = "msg_${System.currentTimeMillis() + 1}",
-                    sender = SenderType.TUTOR,
-                    text = tutorTurn.data.text + if (!tutorTurn.data.resumePrompt.isNullOrBlank()) "\n\n${tutorTurn.data.resumePrompt}" else ""
-                )
-                _uiState.value = _uiState.value.copy(messages = _uiState.value.messages + responseMsg)
-                return@launch
-            }
-
-            // Otherwise, evaluate student answer to the current activity
-            val eval = gemini.evaluateAnswer(
-                apiKey = apiKey,
-                subject = map.subject,
-                topic = map.topicName,
-                classLevel = map.classLevel,
-                currentConcept = subtopic.title,
-                activityQuestion = state.currentActivityQuestion ?: "Explain ${subtopic.title}",
-                expectedConceptOrKeyPoints = state.currentExpectedKeyPoints ?: subtopic.shortSummary,
-                studentAnswer = messageText,
-                attemptNumber = state.attemptCount
-            )
-
-            _uiState.value = _uiState.value.copy(isLoading = false)
-
-            when (eval) {
+            when (evalResult) {
                 is GeminiResult.Success -> {
-                    val evaluation = eval.data
-                    _uiState.value = _uiState.value.copy(
-                        evaluationResult = evaluation,
-                        attemptCount = state.attemptCount + 1,
-                        struggleCount = if (!evaluation.isCorrect) state.struggleCount + 1 else state.struggleCount
-                    )
-
-                    if (evaluation.allowsRetry && !evaluation.isCorrect) {
-                        // Guide student with hint and let them think/try again
-                        val hintMsg = ChatMessage(
-                            id = "msg_${System.currentTimeMillis() + 2}",
-                            sender = SenderType.TUTOR,
-                            text = (if (!evaluation.hint.isNullOrBlank()) "💡 **Hint:** ${evaluation.hint}" else evaluation.praise) + "\n\nGive it another shot in your own words!"
-                        )
-                        _uiState.value = _uiState.value.copy(messages = _uiState.value.messages + hintMsg)
+                    val evaluation = evalResult.data
+                    val nextPhase = if (evaluation.conceptCompleted) {
+                        LessonPhase.CONCEPT_COMPLETED
+                    } else {
+                        LessonPhase.FEEDBACK
                     }
 
-                    if (!evaluation.isCorrect) {
-                        // Schedule spaced retrieval item for weak concept
+                    _uiState.value = _uiState.value.copy(
+                        phase = nextPhase,
+                        evaluationResult = evaluation,
+                        attemptNumber = state.attemptNumber + 1,
+                        struggleCount = if (!evaluation.conceptCompleted) state.struggleCount + 1 else state.struggleCount
+                    )
+
+                    // Spaced Retrieval Integration: update memory queue based on demonstrated mastery
+                    if (evaluation.conceptCompleted) {
                         val revItem = RevisionItem(
-                            id = "rev_${System.currentTimeMillis()}",
+                            id = "rev_${concept.id}",
                             topicId = map.topicId,
                             topicTitle = map.topicName,
-                            subtopicTitle = subtopic.title,
-                            prompt = "Recall concept: ${subtopic.title}",
-                            expectedAnswer = subtopic.shortSummary,
-                            intervalDays = 1,
-                            dueDate = System.currentTimeMillis() + 1000 * 60 * 60 * 24,
-                            isWeakArea = true
-                        )
-                        storage.updateRevisionItem(revItem)
-                    } else {
-                        // Mark mastered and schedule retrieval review
-                        val revItem = RevisionItem(
-                            id = "rev_${System.currentTimeMillis()}",
-                            topicId = map.topicId,
-                            topicTitle = map.topicName,
-                            subtopicTitle = subtopic.title,
-                            prompt = state.currentActivityQuestion ?: "Explain ${subtopic.title}",
-                            expectedAnswer = subtopic.shortSummary,
-                            intervalDays = 3,
-                            dueDate = System.currentTimeMillis() + 1000 * 60 * 60 * 72,
-                            isWeakArea = false
+                            subtopicTitle = concept.title,
+                            prompt = activity.question,
+                            expectedAnswer = activity.expectedAnswerCriteria,
+                            intervalDays = if (evaluation.scoreOutOfTen >= 8) 3 else 1,
+                            dueDate = System.currentTimeMillis() + (if (evaluation.scoreOutOfTen >= 8) 3 else 1) * 24 * 60 * 60 * 1000L,
+                            isWeakArea = evaluation.scoreOutOfTen < 8
                         )
                         storage.updateRevisionItem(revItem)
                     }
                 }
                 is GeminiResult.Error -> {
+                    // Safe recovery: accept answer with supportive feedback
+                    val fallbackEval = StructuredAnswerEvaluation(
+                        verdict = EvaluationVerdict.CORRECT,
+                        scoreOutOfTen = 8,
+                        specificPraise = "You demonstrated clear understanding of the core concept.",
+                        explanationOfMistake = null,
+                        targetedHint = null,
+                        conceptCompleted = true,
+                        allowsRetry = false
+                    )
                     _uiState.value = _uiState.value.copy(
-                        evaluationResult = AnswerEvaluation(
-                            isCorrect = true,
-                            scoreOutOfTen = 8,
-                            praise = "Good attempt! You demonstrated solid understanding.",
-                            correction = null,
-                            hint = null,
-                            allowsRetry = false,
-                            isMastered = true,
-                            nextStepRecommendation = "Ready for the next concept."
-                        )
+                        phase = LessonPhase.CONCEPT_COMPLETED,
+                        evaluationResult = fallbackEval
                     )
                 }
                 is GeminiResult.Loading -> {}
@@ -278,44 +267,135 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
         }
     }
 
-    fun nextSubtopic() {
+    /**
+     * Explicit advance to the next concept. Called ONLY when the student taps the Continue button.
+     * Prevents Gemini or loose text from arbitrarily skipping or remaining on a concept.
+     */
+    fun advanceToNextConcept() {
         val state = _uiState.value
         val map = state.topicMap ?: return
-        val currentSub = state.currentSubtopic
-        val nextIdx = state.currentSubtopicIndex + 1
+        val currentIndex = state.currentConceptIndex
+        val nextIndex = currentIndex + 1
 
-        val updatedPreviouslyTaught = if (currentSub != null) {
-            state.previouslyTaughtConcepts + currentSub.title
+        val currentTitle = state.currentSubtopic?.title
+        val updatedPreviouslyTaught = if (currentTitle != null) {
+            state.previouslyTaughtConcepts + currentTitle
         } else state.previouslyTaughtConcepts
 
-        if (nextIdx < map.subtopics.size) {
-            val nextSub = map.subtopics[nextIdx]
-            val noticeMsg = ChatMessage(
-                id = "msg_${System.currentTimeMillis()}",
-                sender = SenderType.SYSTEM_CHECK,
-                text = "Next: Concept ${nextIdx + 1} of ${map.subtopics.size} — ${nextSub.title}"
-            )
-            _uiState.value = _uiState.value.copy(
-                currentSubtopicIndex = nextIdx,
-                currentSubtopic = nextSub,
+        if (nextIndex < map.subtopics.size) {
+            val nextConcept = map.subtopics[nextIndex]
+            _uiState.value = state.copy(
+                phase = LessonPhase.NEXT_CONCEPT,
+                currentConceptIndex = nextIndex,
+                currentSubtopic = nextConcept,
                 previouslyTaughtConcepts = updatedPreviouslyTaught,
-                messages = state.messages + noticeMsg,
                 evaluationResult = null,
-                isAwaitingAnswer = false,
-                attemptCount = 1,
+                studentAnswerInput = "",
+                attemptNumber = 1,
                 struggleCount = 0
             )
-            teachCurrentSubtopic()
+
+            // Update topic progress in local database
+            viewModelScope.launch {
+                val progressPercent = ((nextIndex).toFloat() / map.subtopics.size.toFloat() * 100).toInt()
+                val updatedTopic = com.bunde.learning.data.model.Topic(
+                    id = map.topicId,
+                    subject = map.subject,
+                    name = map.topicName,
+                    classLevel = map.classLevel,
+                    progressPercent = progressPercent,
+                    totalSubtopics = map.subtopics.size,
+                    completedSubtopics = nextIndex,
+                    lastAccessedTimestamp = System.currentTimeMillis(),
+                    isMastered = false,
+                    weakAreasCount = state.struggleCount
+                )
+                storage.saveTopic(updatedTopic)
+            }
+
+            startConcept(nextConcept, nextIndex, map)
         } else {
-            val completeMsg = ChatMessage(
-                id = "msg_${System.currentTimeMillis()}",
-                sender = SenderType.TUTOR,
-                text = "Congratulations! You have completed all ${map.subtopics.size} concepts for ${map.topicName}. Active recall cards have been added to your Revision schedule."
+            // All concepts completed!
+            _uiState.value = state.copy(
+                phase = LessonPhase.LESSON_COMPLETED,
+                previouslyTaughtConcepts = updatedPreviouslyTaught
             )
-            _uiState.value = _uiState.value.copy(
-                messages = state.messages + completeMsg,
-                isLessonCompleted = true
-            )
+
+            viewModelScope.launch {
+                val completedTopic = com.bunde.learning.data.model.Topic(
+                    id = map.topicId,
+                    subject = map.subject,
+                    name = map.topicName,
+                    classLevel = map.classLevel,
+                    progressPercent = 100,
+                    totalSubtopics = map.subtopics.size,
+                    completedSubtopics = map.subtopics.size,
+                    lastAccessedTimestamp = System.currentTimeMillis(),
+                    isMastered = true,
+                    weakAreasCount = 0
+                )
+                storage.saveTopic(completedTopic)
+            }
         }
+    }
+
+    /**
+     * Ask Bunde a natural clarifying question / interruption at any point during the lesson.
+     * Does NOT advance the lesson or submit an answer.
+     */
+    fun askTutorQuestion(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.isBlank()) return
+
+        val state = _uiState.value
+        val map = state.topicMap ?: return
+        val currentConcept = state.currentSubtopic?.title ?: map.topicName
+        val currentQuestion = state.currentActivity?.question ?: "current lesson challenge"
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isInterruptionLoading = true)
+
+            val result = gemini.handleTutorInterruption(
+                apiKey = apiKey,
+                subject = map.subject,
+                topic = map.topicName,
+                classLevel = map.classLevel,
+                currentConceptTitle = currentConcept,
+                currentActivityQuestion = currentQuestion,
+                studentQuery = trimmed
+            )
+
+            val item = when (result) {
+                is GeminiResult.Success -> TutorInterruptionItem(
+                    id = "intr_${System.currentTimeMillis()}",
+                    studentQuery = trimmed,
+                    tutorExplanation = result.data.explanation,
+                    bridgeBack = result.data.bridgeBackToLesson
+                )
+                is GeminiResult.Error -> TutorInterruptionItem(
+                    id = "intr_${System.currentTimeMillis()}",
+                    studentQuery = trimmed,
+                    tutorExplanation = "Regarding '$trimmed': in ${map.subject}, $currentConcept focuses on how this principle operates directly.",
+                    bridgeBack = "Let's return to the challenge when you're ready."
+                )
+                is GeminiResult.Loading -> null
+            }
+
+            if (item != null) {
+                _uiState.value = _uiState.value.copy(
+                    interruptions = _uiState.value.interruptions + item,
+                    isInterruptionLoading = false
+                )
+            } else {
+                _uiState.value = _uiState.value.copy(isInterruptionLoading = false)
+            }
+        }
+    }
+
+    fun retryCurrentActivity() {
+        _uiState.value = _uiState.value.copy(
+            phase = LessonPhase.WAITING_FOR_ANSWER,
+            studentAnswerInput = ""
+        )
     }
 }

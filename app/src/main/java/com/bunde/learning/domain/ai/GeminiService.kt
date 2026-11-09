@@ -24,67 +24,82 @@ interface GeminiService {
         classLevel: String
     ): GeminiResult<TopicMap>
 
-    suspend fun generateConceptStep(
+    suspend fun generateStructuredConceptStep(
         apiKey: String,
         subject: String,
         topic: String,
         classLevel: String,
-        subtopicTitle: String,
-        category: String,
+        conceptId: String,
+        conceptTitle: String,
+        conceptCategory: String,
         conceptSummary: String,
         conceptIndex: Int,
         totalConcepts: Int,
         previouslyTaughtConcepts: List<String>,
         uploadedNotesSummary: String? = null,
-        struggleCount: Int = 0
-    ): GeminiResult<ConceptStepResponse>
+        struggleCount: Int = 0,
+        recentlyUsedActivityTypes: List<String> = emptyList()
+    ): GeminiResult<StructuredConceptStep>
 
-    suspend fun askTutor(
+    suspend fun evaluateStructuredAnswer(
         apiKey: String,
         subject: String,
         topic: String,
         classLevel: String,
-        currentConcept: String,
-        currentActivityQuestion: String?,
-        conversationHistory: List<Pair<String, String>>,
-        studentMessage: String,
-        previouslyTaughtConcepts: List<String> = emptyList(),
-        struggleCount: Int = 0
-    ): GeminiResult<TutorTurnResponse>
-
-    suspend fun evaluateAnswer(
-        apiKey: String,
-        subject: String,
-        topic: String,
-        classLevel: String,
-        currentConcept: String,
+        conceptTitle: String,
+        learningObjective: String,
         activityQuestion: String,
-        expectedConceptOrKeyPoints: String,
+        expectedAnswerCriteria: String,
         studentAnswer: String,
         attemptNumber: Int = 1
-    ): GeminiResult<AnswerEvaluation>
+    ): GeminiResult<StructuredAnswerEvaluation>
+
+    suspend fun handleTutorInterruption(
+        apiKey: String,
+        subject: String,
+        topic: String,
+        classLevel: String,
+        currentConceptTitle: String,
+        currentActivityQuestion: String,
+        studentQuery: String
+    ): GeminiResult<TutorInterruptionResponse>
 }
 
-data class ConceptStepResponse(
-    val explanation: String,
-    val checkActivityQuestion: String,
-    val activityType: String = "QUESTION", // e.g., "QUESTION", "CHALLENGE", "PREDICTION", "STEP_BY_STEP", "COMPARISON"
-    val expectedConceptKeyPoints: String
+data class StructuredActivity(
+    val type: String, // e.g. "SCENARIO", "ERROR_DETECTION", "PREDICTION", "STEP_SOLVE", "COMPARISON", "CALCULATION", "CAUSE_EFFECT", "REASONING"
+    val question: String,
+    val options: List<String> = emptyList(),
+    val expectedAnswerCriteria: String,
+    val hint: String? = null
 )
 
-data class TutorTurnResponse(
-    val text: String,
-    val isInterruptionHandled: Boolean = false,
-    val resumePrompt: String? = null
+data class StructuredConceptStep(
+    val conceptId: String,
+    val learningObjective: String,
+    val conciseExplanation: String,
+    val concreteExample: String,
+    val activity: StructuredActivity
 )
 
-data class AnswerEvaluation(
-    val isCorrect: Boolean,
+enum class EvaluationVerdict {
+    CORRECT,
+    PARTIALLY_CORRECT,
+    INCORRECT,
+    NEEDS_CLARIFICATION
+}
+
+data class StructuredAnswerEvaluation(
+    val verdict: EvaluationVerdict,
     val scoreOutOfTen: Int,
-    val praise: String,
-    val correction: String?,
-    val hint: String? = null,
-    val allowsRetry: Boolean = false,
-    val isMastered: Boolean = false,
-    val nextStepRecommendation: String
+    val specificPraise: String,
+    val explanationOfMistake: String? = null,
+    val targetedHint: String? = null,
+    val followUpActivity: StructuredActivity? = null,
+    val conceptCompleted: Boolean,
+    val allowsRetry: Boolean
+)
+
+data class TutorInterruptionResponse(
+    val explanation: String,
+    val bridgeBackToLesson: String
 )

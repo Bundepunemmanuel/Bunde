@@ -63,8 +63,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.0.2
-          name: "Bunde Native Android v1.0.2"
+          tag_name: v1.0.3
+          name: "Bunde Native Android v1.0.3"
           body: "Direct `.apk` file download for Bunde (Native Android Jetpack Compose App)."
           files: app/build/outputs/apk/debug/app-debug.apk
         env:

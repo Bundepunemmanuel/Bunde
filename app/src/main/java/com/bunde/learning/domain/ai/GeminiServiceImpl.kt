@@ -205,62 +205,70 @@ class GeminiServiceImpl : GeminiService {
         }
     }
 
-    override suspend fun generateConceptStep(
+    override suspend fun generateStructuredConceptStep(
         apiKey: String,
         subject: String,
         topic: String,
         classLevel: String,
-        subtopicTitle: String,
-        category: String,
+        conceptId: String,
+        conceptTitle: String,
+        conceptCategory: String,
         conceptSummary: String,
         conceptIndex: Int,
         totalConcepts: Int,
         previouslyTaughtConcepts: List<String>,
         uploadedNotesSummary: String?,
-        struggleCount: Int
-    ): GeminiResult<ConceptStepResponse> = withContext(Dispatchers.IO) {
+        struggleCount: Int,
+        recentlyUsedActivityTypes: List<String>
+    ): GeminiResult<StructuredConceptStep> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
             return@withContext GeminiResult.Error("API key missing. Enter key in Settings.", isKeyMissing = true)
         }
 
-        val adaptationGuideline = """
-            ADAPTATION DISCIPLINE BY SUBJECT:
-            - Mathematics: Demonstrate the exact underlying step/rule first. Formulate an activity where the student solves a problem or spots a specific error.
-            - Sciences (Physics, Chemistry, Biology): Clarify mechanisms, cause-and-effect relationships, laws, or thought experiments. Formulate a prediction or application question.
-            - Languages & Literature: Focus on structural usage, grammar rules, vocabulary distinctions, character motivations, themes, or textual analysis.
-            - Social Sciences (Economics, Commerce, Government, Geography, History): Ground concepts in real-world cause/effect, economic incentives, institutional functions, or historical sequence.
-            - Religious Studies (CRS/IRS): Accurately explain scriptures, events, figures, historical context, moral lessons, and theological concepts without bias or dilution.
-        """.trimIndent()
-
         val prompt = """
-            You are Bunde, an active, master educational personal tutor.
-            You are teaching ONE specific concept in a structured lesson:
+            You are Bunde, an active personal AI tutor.
+            Generate a targeted, high-impact learning step for:
             - Subject: $subject
-            - Overall Topic: $topic
+            - Topic: $topic
             - Educational Level: $classLevel
-            - Concept Position: Concept ${conceptIndex + 1} of $totalConcepts
-            - Current Concept Name: $subtopicTitle
-            - Concept Category: $category
-            - Core Concept Goal: $conceptSummary
-            - Concepts Already Covered in this Lesson: ${if (previouslyTaughtConcepts.isEmpty()) "None yet (this is the opening concept)." else previouslyTaughtConcepts.joinToString(", ")}
-            - Student's Uploaded Notes Context: ${uploadedNotesSummary ?: "Standard curriculum (no external notes uploaded)."}
-            - Student's Current Struggle Level: $struggleCount (0 = normal, >0 = student struggled previously on this topic, simplify explanation and use an intuitive analogy).
+            - Concept ID: $conceptId
+            - Concept Title: $conceptTitle
+            - Concept Category: $conceptCategory
+            - Summary/Core Objective: $conceptSummary
+            - Step Progress: Concept ${conceptIndex + 1} of $totalConcepts
+            - Previously Taught Concepts: ${if (previouslyTaughtConcepts.isEmpty()) "None (opening concept)" else previouslyTaughtConcepts.joinToString(", ")}
+            - Uploaded Notes Context: ${uploadedNotesSummary ?: "Standard school syllabus"}
+            - Student Struggle Level: $struggleCount
+            - Recently Used Activity Types (AVOID repeating these unless essential): ${recentlyUsedActivityTypes.joinToString(", ").ifEmpty { "None" }}
 
-            $adaptationGuideline
+            PEDAGOGICAL REQUIREMENTS (CRITICAL):
+            1. ZERO PREAMBLE: Start directly with the core explanation. No "Welcome back", "Hello", "Good morning", or greeting.
+            2. CONCISE EXPLANATION: Write ONLY 2 to 3 focused paragraphs explaining this single concept clearly for a $classLevel student. Explain any tricky terminology simply.
+            3. CONCRETE EXAMPLE: Provide 1 vivid, authentic real-world example, calculation demonstration, or practical scenario.
+            4. DESTROY GENERIC QUESTIONS: DO NOT ask "What did you learn?", "Can you explain this in your own words?", "Do you understand?", or "Give an example".
+            5. SPECIFIC ACTIVITY: The activity MUST test a concrete piece of the concept just explained.
+               Choose the best type for this subject/concept:
+               - "SCENARIO": Present a situation; student decides or explains the right outcome.
+               - "ERROR_DETECTION": Present a flawed statement/step; student spots the error.
+               - "PREDICTION": Student predicts what happens if a factor changes.
+               - "STEP_SOLVE": Student solves the next mathematical/chemical/economic step.
+               - "COMPARISON": Student distinguishes two closely related elements.
+               - "CAUSE_EFFECT": Student explains the mechanism behind an effect.
+               - "CALCULATION": Student calculates a value using the demonstrated formula.
 
-            TUTOR BEHAVIOR RULES (CRITICAL):
-            1. ZERO GREETINGS: Do NOT say "Good morning", "Welcome", "Hello", "Take your seats", "Today in class", "I am Bunde", or introduce yourself. Start directly with the concept explanation sentence.
-            2. DO NOT deliver a long lecture. Teach ONLY this single concept in 2 to 3 concise, vivid paragraphs with 1 concrete real-world example.
-            3. DO NOT ask "Do you understand?" or "Let me know if you want to learn more."
-            4. END WITH ONE ENGAGING, INTERACTIVE ACTIVITY QUESTION to test the student's actual understanding immediately (e.g. solve a step, make a prediction, spot an error, apply the rule, or explain in their own words).
-            5. Never confuse the topic ($topic) with a person's name.
-
-            Return strictly a JSON object:
+            Return strictly a JSON object with this exact structure:
             {
-              "explanation": "Direct explanation of this concept without greeting or preamble, including 1 concrete example.",
-              "checkActivityQuestion": "The specific question or challenge testing this concept.",
-              "activityType": "QUESTION",
-              "expectedConceptKeyPoints": "Key points that a correct student response must embody (in student's own words)."
+              "conceptId": "$conceptId",
+              "learningObjective": "Clear 1-sentence learning objective being tested",
+              "conciseExplanation": "The 2-3 paragraph explanation without greetings",
+              "concreteExample": "The practical example or demonstration",
+              "activity": {
+                "type": "SCENARIO",
+                "question": "The specific challenge testing this exact concept",
+                "options": [],
+                "expectedAnswerCriteria": "Key reasoning or facts required for an answer to be correct in the student's own words",
+                "hint": "A guiding hint if the student gets stuck"
+              }
             }
         """.trimIndent()
 
@@ -268,150 +276,100 @@ class GeminiServiceImpl : GeminiService {
             val responseText = executeGeminiPrompt(apiKey, prompt, emptyList())
             val jsonClean = extractJsonString(responseText)
             val jsonRoot = JSONObject(jsonClean)
-            val step = ConceptStepResponse(
-                explanation = jsonRoot.optString("explanation", conceptSummary),
-                checkActivityQuestion = jsonRoot.optString("checkActivityQuestion", "In your own words, how does $subtopicTitle relate to $topic?"),
-                activityType = jsonRoot.optString("activityType", "QUESTION"),
-                expectedConceptKeyPoints = jsonRoot.optString("expectedConceptKeyPoints", conceptSummary)
+            val actObj = jsonRoot.optJSONObject("activity") ?: JSONObject()
+
+            val optionsList = mutableListOf<String>()
+            val optArr = actObj.optJSONArray("options")
+            if (optArr != null) {
+                for (i in 0 until optArr.length()) {
+                    optionsList.add(optArr.getString(i))
+                }
+            }
+
+            val activity = StructuredActivity(
+                type = actObj.optString("type", "SCENARIO"),
+                question = actObj.optString("question", "How does $conceptTitle apply in a practical situation?"),
+                options = optionsList,
+                expectedAnswerCriteria = actObj.optString("expectedAnswerCriteria", conceptSummary),
+                hint = actObj.optString("hint", "").ifBlank { null }
+            )
+
+            val step = StructuredConceptStep(
+                conceptId = jsonRoot.optString("conceptId", conceptId),
+                learningObjective = jsonRoot.optString("learningObjective", "Master $conceptTitle"),
+                conciseExplanation = jsonRoot.optString("conciseExplanation", conceptSummary),
+                concreteExample = jsonRoot.optString("concreteExample", "In daily practice, $conceptTitle operates directly within $subject."),
+                activity = activity
             )
             GeminiResult.Success(step)
         } catch (e: Exception) {
             GeminiResult.Success(
-                ConceptStepResponse(
-                    explanation = "$subtopicTitle is a fundamental part of $topic in $subject. Specifically, $conceptSummary.",
-                    checkActivityQuestion = "How would you explain the importance of $subtopicTitle in your own words?",
-                    activityType = "QUESTION",
-                    expectedConceptKeyPoints = conceptSummary
+                StructuredConceptStep(
+                    conceptId = conceptId,
+                    learningObjective = "Understand $conceptTitle in $subject",
+                    conciseExplanation = "$conceptTitle is an essential concept in $topic. Specifically, $conceptSummary.",
+                    concreteExample = "For example, in $subject, this concept is applied to analyze and solve problems directly.",
+                    activity = StructuredActivity(
+                        type = "SCENARIO",
+                        question = "Consider a situation in $topic where $conceptTitle is applied. What is the primary outcome?",
+                        options = emptyList(),
+                        expectedAnswerCriteria = conceptSummary,
+                        hint = "Think about the key role $conceptTitle plays."
+                    )
                 )
             )
         }
     }
 
-    override suspend fun askTutor(
+    override suspend fun evaluateStructuredAnswer(
         apiKey: String,
         subject: String,
         topic: String,
         classLevel: String,
-        currentConcept: String,
-        currentActivityQuestion: String?,
-        conversationHistory: List<Pair<String, String>>,
-        studentMessage: String,
-        previouslyTaughtConcepts: List<String>,
-        struggleCount: Int
-    ): GeminiResult<TutorTurnResponse> = withContext(Dispatchers.IO) {
-        if (apiKey.isBlank()) {
-            return@withContext GeminiResult.Error("API key missing.", isKeyMissing = true)
-        }
-
-        val prompt = """
-            You are Bunde, an active, responsive personal tutor.
-            Current Lesson Context:
-            - Subject: $subject
-            - Topic: $topic
-            - Educational Level: $classLevel
-            - Current Concept Being Taught: $currentConcept
-            - Current Pending Activity/Question: ${currentActivityQuestion ?: "None pending."}
-            - Previous Concepts Covered: ${previouslyTaughtConcepts.joinToString(", ").ifEmpty { "Opening concept" }}
-            - Student Struggle Level: $struggleCount
-
-            The student sent this message during the lesson:
-            "$studentMessage"
-
-            DETERMINE THE INTENT:
-            Case A: The student is asking an INTERRUPTION / QUESTION / CLARIFICATION (e.g. "what does that word mean?", "give another example", "why not X?", "I don't get this", "can we go back?"):
-            - Answer their question directly and concisely in 2-3 sentences.
-            - Connect the answer back to the current concept ($currentConcept).
-            - Guide them smoothly back to the lesson activity.
-            - Set "isInterruptionHandled": true.
-            - Set "resumePrompt": "Ready to try the challenge? [Restate or adjust the question]"
-
-            Case B: The student is ANSWERING the pending activity question:
-            - Evaluate their thought process.
-            - Recognize what is correct.
-            - If incomplete or incorrect, give a tailored hint rather than giving away the answer immediately.
-            - Set "isInterruptionHandled": false.
-
-            Return strictly a JSON object:
-            {
-              "text": "Your direct, engaging educational response.",
-              "isInterruptionHandled": false,
-              "resumePrompt": null
-            }
-        """.trimIndent()
-
-        try {
-            val responseText = executeGeminiPrompt(apiKey, prompt, emptyList())
-            val jsonClean = extractJsonString(responseText)
-            val jsonRoot = JSONObject(jsonClean)
-            val tutorResponse = TutorTurnResponse(
-                text = jsonRoot.optString("text", "Let's examine how this connects to $currentConcept."),
-                isInterruptionHandled = jsonRoot.optBoolean("isInterruptionHandled", false),
-                resumePrompt = jsonRoot.optString("resumePrompt", "").ifBlank { null }
-            )
-            GeminiResult.Success(tutorResponse)
-        } catch (e: Exception) {
-            GeminiResult.Success(
-                TutorTurnResponse(
-                    text = "Regarding $studentMessage: in $subject, $currentConcept is central because of how it applies here. Let's focus on our current question.",
-                    isInterruptionHandled = true,
-                    resumePrompt = currentActivityQuestion
-                )
-            )
-        }
-    }
-
-    override suspend fun evaluateAnswer(
-        apiKey: String,
-        subject: String,
-        topic: String,
-        classLevel: String,
-        currentConcept: String,
+        conceptTitle: String,
+        learningObjective: String,
         activityQuestion: String,
-        expectedConceptOrKeyPoints: String,
+        expectedAnswerCriteria: String,
         studentAnswer: String,
         attemptNumber: Int
-    ): GeminiResult<AnswerEvaluation> = withContext(Dispatchers.IO) {
+    ): GeminiResult<StructuredAnswerEvaluation> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
             return@withContext GeminiResult.Error("API key missing.", isKeyMissing = true)
         }
 
         val prompt = """
-            You are Bunde, an expert educational AI evaluating a secondary school student's answer.
-            Lesson Context:
+            You are Bunde, an expert educational AI evaluating a $classLevel secondary school student's answer.
+            Evaluation Context:
             - Subject: $subject
             - Topic: $topic
-            - Class Level: $classLevel
-            - Concept: $currentConcept
+            - Concept: $conceptTitle
+            - Learning Objective: $learningObjective
             - Question Asked: $activityQuestion
-            - Core Concept / Key Points: $expectedConceptOrKeyPoints
+            - Expected Answer Criteria: $expectedAnswerCriteria
             - Student Answer: "$studentAnswer"
             - Attempt Number: $attemptNumber
 
-            EVALUATION PRINCIPLES:
-            1. Students can answer in their OWN WORDS. Do NOT demand textbook regurgitation. Evaluate genuine conceptual comprehension.
-            2. Accept valid alternative interpretations, methods, or analogies.
-            3. If the answer is substantially correct (showing good understanding):
-               - "isCorrect": true, score 8-10, "isMastered": true, "allowsRetry": false.
-               - Praise specifically what they explained well.
-            4. If the answer is partially correct or missing a critical component:
-               - "isCorrect": false, score 5-7, "allowsRetry": true, "isMastered": false.
-               - Acknowledge what they got right, specify the missing piece, and give a guiding HINT without giving the answer away yet.
-            5. If the answer is incorrect or reveals a misconception:
-               - "isCorrect": false, score 1-4, "allowsRetry": true, "isMastered": false.
-               - Address the misconception gently, provide an intuitive analogy or hint, and invite them to rethink.
-            6. If attemptNumber >= 2 and student still struggles:
-               - "allowsRetry": false. Provide a clear, alternative explanation so the student is not stuck.
+            EVALUATION RULES:
+            1. Students can answer in their OWN WORDS. Do NOT demand verbatim textbook phrases.
+            2. Accept valid alternative reasoning or creative explanations that demonstrate true understanding.
+            3. Verdict choices:
+               - "CORRECT": Substantially demonstrates the objective. Score: 8-10. conceptCompleted = true, allowsRetry = false.
+               - "PARTIALLY_CORRECT": Got some aspects right, but missed an essential concept. Score: 5-7. conceptCompleted = false, allowsRetry = true. Provide a targetedHint.
+               - "INCORRECT": Revealed a clear misconception or wrong reasoning. Score: 1-4. conceptCompleted = false, allowsRetry = true. Explain the mistake gently and provide a hint.
+               - "NEEDS_CLARIFICATION": Answer is too vague, ambiguous, or one word. Ask the student to elaborate. Score: 4. conceptCompleted = false, allowsRetry = true.
+            4. If attemptNumber >= 2 and the student is still struggling:
+               - conceptCompleted = true, allowsRetry = false.
+               - Provide a clear, supportive resolution so the student is never stuck on a concept.
 
             Return strictly a JSON object:
             {
-              "isCorrect": true,
+              "verdict": "CORRECT",
               "scoreOutOfTen": 9,
-              "praise": "Clear, specific praise on what was understood.",
-              "correction": "Targeted explanation of misconception or missing element, or null if complete.",
-              "hint": "Guiding hint if student should retry, or null.",
-              "allowsRetry": false,
-              "isMastered": true,
-              "nextStepRecommendation": "Next concept ready or retry current concept."
+              "specificPraise": "What the student understood well",
+              "explanationOfMistake": null,
+              "targetedHint": null,
+              "conceptCompleted": true,
+              "allowsRetry": false
             }
         """.trimIndent()
 
@@ -419,28 +377,92 @@ class GeminiServiceImpl : GeminiService {
             val responseText = executeGeminiPrompt(apiKey, prompt, emptyList())
             val jsonClean = extractJsonString(responseText)
             val jsonRoot = JSONObject(jsonClean)
-            val eval = AnswerEvaluation(
-                isCorrect = jsonRoot.optBoolean("isCorrect", true),
-                scoreOutOfTen = jsonRoot.optInt("scoreOutOfTen", 8),
-                praise = jsonRoot.optString("praise", "Good effort and clear reasoning!"),
-                correction = jsonRoot.optString("correction", "").ifBlank { null },
-                hint = jsonRoot.optString("hint", "").ifBlank { null },
-                allowsRetry = jsonRoot.optBoolean("allowsRetry", false),
-                isMastered = jsonRoot.optBoolean("isMastered", true),
-                nextStepRecommendation = jsonRoot.optString("nextStepRecommendation", "Ready for the next concept.")
+
+            val verdictStr = jsonRoot.optString("verdict", "CORRECT").uppercase()
+            val verdict = runCatching { EvaluationVerdict.valueOf(verdictStr) }.getOrDefault(
+                if (jsonRoot.optInt("scoreOutOfTen", 8) >= 8) EvaluationVerdict.CORRECT else EvaluationVerdict.PARTIALLY_CORRECT
+            )
+
+            val isCompleted = jsonRoot.optBoolean("conceptCompleted", verdict == EvaluationVerdict.CORRECT || attemptNumber >= 2)
+            val canRetry = jsonRoot.optBoolean("allowsRetry", !isCompleted && attemptNumber < 2)
+
+            val eval = StructuredAnswerEvaluation(
+                verdict = verdict,
+                scoreOutOfTen = jsonRoot.optInt("scoreOutOfTen", if (verdict == EvaluationVerdict.CORRECT) 9 else 6),
+                specificPraise = jsonRoot.optString("specificPraise", "Good effort in reasoning through this concept."),
+                explanationOfMistake = jsonRoot.optString("explanationOfMistake", "").ifBlank { null },
+                targetedHint = jsonRoot.optString("targetedHint", "").ifBlank { null },
+                followUpActivity = null,
+                conceptCompleted = isCompleted,
+                allowsRetry = canRetry
             )
             GeminiResult.Success(eval)
         } catch (e: Exception) {
             GeminiResult.Success(
-                AnswerEvaluation(
-                    isCorrect = true,
+                StructuredAnswerEvaluation(
+                    verdict = EvaluationVerdict.CORRECT,
                     scoreOutOfTen = 8,
-                    praise = "Good attempt! You demonstrated solid understanding.",
-                    correction = null,
-                    hint = null,
-                    allowsRetry = false,
-                    isMastered = true,
-                    nextStepRecommendation = "Proceeding to next concept."
+                    specificPraise = "You demonstrated solid conceptual understanding in your explanation.",
+                    explanationOfMistake = null,
+                    targetedHint = null,
+                    followUpActivity = null,
+                    conceptCompleted = true,
+                    allowsRetry = false
+                )
+            )
+        }
+    }
+
+    override suspend fun handleTutorInterruption(
+        apiKey: String,
+        subject: String,
+        topic: String,
+        classLevel: String,
+        currentConceptTitle: String,
+        currentActivityQuestion: String,
+        studentQuery: String
+    ): GeminiResult<TutorInterruptionResponse> = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank()) {
+            return@withContext GeminiResult.Error("API key missing.", isKeyMissing = true)
+        }
+
+        val prompt = """
+            You are Bunde, an active personal tutor.
+            The student interrupted the structured lesson to ask this question:
+            "$studentQuery"
+
+            Lesson Context:
+            - Subject: $subject
+            - Topic: $topic
+            - Current Concept: $currentConceptTitle
+            - Pending Activity Challenge: $currentActivityQuestion
+
+            INSTRUCTIONS:
+            1. Answer the student's question directly, accurately, and simply in 2 to 3 sentences.
+            2. Connect the explanation back to $currentConceptTitle.
+            3. Provide a natural bridge sentence that guides them back to the active challenge.
+
+            Return strictly a JSON object:
+            {
+              "explanation": "Direct answer to the student's question",
+              "bridgeBackToLesson": "Bridge sentence connecting back to the current challenge"
+            }
+        """.trimIndent()
+
+        try {
+            val responseText = executeGeminiPrompt(apiKey, prompt, emptyList())
+            val jsonClean = extractJsonString(responseText)
+            val jsonRoot = JSONObject(jsonClean)
+            val resp = TutorInterruptionResponse(
+                explanation = jsonRoot.optString("explanation", "In $subject, $currentConceptTitle directly addresses this."),
+                bridgeBackToLesson = jsonRoot.optString("bridgeBackToLesson", "Now let's apply this to our current challenge!")
+            )
+            GeminiResult.Success(resp)
+        } catch (e: Exception) {
+            GeminiResult.Success(
+                TutorInterruptionResponse(
+                    explanation = "That's a helpful question! In $subject, this ties directly to $currentConceptTitle.",
+                    bridgeBackToLesson = "Let's return to the challenge when you're ready."
                 )
             )
         }
