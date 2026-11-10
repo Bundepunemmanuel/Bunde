@@ -40,32 +40,34 @@ jobs:
       - name: Build Debug APK with Gradle
         run: ./gradlew assembleDebug --stacktrace --no-daemon
 
-      - name: Verify Debug APK exists
+      - name: Rename and Verify bunde.apk exists
         run: |
-          APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
-          if [ -f "$APK_PATH" ]; then
-            echo "✅ Verified: Debug APK successfully built at $APK_PATH"
-            ls -lh "$APK_PATH"
+          ORIG_APK="app/build/outputs/apk/debug/app-debug.apk"
+          BUNDE_APK="app/build/outputs/apk/debug/bunde.apk"
+          if [ -f "$ORIG_APK" ]; then
+            cp "$ORIG_APK" "$BUNDE_APK"
+            echo "✅ Verified: Renamed to $BUNDE_APK successfully"
+            ls -lh "$BUNDE_APK"
           else
-            echo "❌ Error: Debug APK not found at $APK_PATH"
+            echo "❌ Error: APK not found at $ORIG_APK"
             find app/build -name "*.apk" || true
             exit 1
           fi
 
-      - name: Upload Bunde Debug APK Artifact
+      - name: Upload Bunde APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: bunde-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: bunde-apk
+          path: app/build/outputs/apk/debug/bunde.apk
           retention-days: 14
 
       - name: Publish Direct APK to GitHub Releases
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.0.3
-          name: "Bunde Native Android v1.0.3"
-          body: "Direct `.apk` file download for Bunde (Native Android Jetpack Compose App)."
-          files: app/build/outputs/apk/debug/app-debug.apk
+          tag_name: v1.0.4
+          name: "Bunde Native Android v1.0.4"
+          body: "Direct `bunde.apk` download for Bunde (Native Android Jetpack Compose App with In-App Update Checker)."
+          files: app/build/outputs/apk/debug/bunde.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

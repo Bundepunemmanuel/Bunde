@@ -25,7 +25,9 @@ data class HomeUiState(
     val stats: LearningStats = LearningStats(),
     val deviceProfile: DevicePerformanceProfile? = null,
     val isApiKeyConfigured: Boolean = false,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val appUpdateInfo: com.bunde.learning.util.AppUpdateInfo? = null,
+    val isDownloadingUpdate: Boolean = false
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -84,6 +86,32 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.value = _uiState.value.copy(stats = statsData)
             }
         }
+
+        // Check for updates in the background on app launch
+        checkForAppUpdates()
+    }
+
+    fun checkForAppUpdates() {
+        viewModelScope.launch {
+            val updateInfo = com.bunde.learning.util.UpdateManager.checkForUpdate(getApplication())
+            if (updateInfo.hasUpdate) {
+                _uiState.value = _uiState.value.copy(appUpdateInfo = updateInfo)
+            }
+        }
+    }
+
+    fun triggerOneTapUpdate() {
+        val info = _uiState.value.appUpdateInfo ?: return
+        _uiState.value = _uiState.value.copy(isDownloadingUpdate = true)
+        com.bunde.learning.util.UpdateManager.startOneTapDownloadAndInstall(
+            context = getApplication(),
+            downloadUrl = info.downloadUrl,
+            versionName = info.latestVersionName
+        )
+    }
+
+    fun dismissUpdateBanner() {
+        _uiState.value = _uiState.value.copy(appUpdateInfo = null)
     }
 
     fun processRecallResult(item: RevisionItem, confidenceRating: Int) {

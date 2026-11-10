@@ -103,6 +103,67 @@ fun HomeScreen(
             )
         }
 
+        // In-App Update Notification Banner
+        val updateInfo = state.appUpdateInfo
+        if (updateInfo != null && updateInfo.hasUpdate) {
+            item {
+                BundeCard(
+                    backgroundColor = BundeSuccessLight,
+                    borderColor = BundeSuccess.copy(alpha = 0.5f),
+                    onClick = { viewModel.triggerOneTapUpdate() }
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(BundeSuccess.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.AutoAwesome,
+                                contentDescription = "Update Available",
+                                tint = BundeSuccess,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "New version available! (${updateInfo.latestVersionName})",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = BundeTextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (state.isDownloadingUpdate) "Downloading update... check notification bar" else "Tap here to update now in one click.",
+                                fontSize = 12.sp,
+                                color = BundeTextSecondary
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(BundeSuccess)
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = if (state.isDownloadingUpdate) "Updating..." else "Update",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         // Gemini API Key Notice if not yet provided
         if (!state.isApiKeyConfigured) {
             item {
