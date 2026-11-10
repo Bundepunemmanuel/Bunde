@@ -50,6 +50,7 @@ import com.bunde.learning.ui.theme.BundeBorder
 import com.bunde.learning.ui.theme.BundeHighlight
 import com.bunde.learning.ui.theme.BundeHighlightLight
 import com.bunde.learning.ui.theme.BundeSuccess
+import com.bunde.learning.ui.theme.BundeSuccessLight
 import com.bunde.learning.ui.theme.BundeTextMuted
 import com.bunde.learning.ui.theme.BundeTextPrimary
 import com.bunde.learning.ui.theme.BundeTextSecondary
