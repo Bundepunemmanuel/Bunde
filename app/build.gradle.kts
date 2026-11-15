@@ -12,8 +12,8 @@ android {
         applicationId = "com.bunde.learning"
         minSdk = 26
         targetSdk = 34
-        versionCode = 7
-        versionName = "1.0.6"
+        versionCode = 8
+        versionName = "1.0.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -119,8 +119,9 @@ dependencies {
     // Network & Gemini HTTP Client
     implementation(libs.okhttp)
 
-    // Image loading for Compose
+    // Image & SVG diagram rendering for Compose
     implementation(libs.coil.compose)
+    implementation(libs.androidsvg.aar)
 
     // Tooling for debug
     debugImplementation(libs.androidx.ui.tooling)

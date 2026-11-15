@@ -21,3 +21,8 @@
 -keepclassmembers class * {
     @androidx.compose.runtime.Composable *;
 }
+
+# Keep AndroidSVG
+-dontwarn com.caverock.androidsvg.**
+-keep class com.caverock.androidsvg.** { *; }
+

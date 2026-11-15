@@ -75,6 +75,33 @@ interface GeminiService {
         completedConcepts: List<String>,
         latestStoryThread: String? = null
     ): GeminiResult<SessionRecap>
+
+    suspend fun generateConceptVisualImage(
+        apiKey: String,
+        subject: String,
+        topic: String,
+        conceptTitle: String,
+        imagePrompt: String
+    ): GeminiResult<GeneratedVisualPayload>
+}
+
+enum class VisualAidType {
+    NONE,
+    SVG_DIAGRAM,
+    GENERATED_IMAGE
+}
+
+data class ConceptVisualAid(
+    val type: VisualAidType = VisualAidType.NONE,
+    val title: String = "",
+    val caption: String = "",
+    val svgMarkup: String? = null,
+    val imagePrompt: String? = null
+)
+
+sealed class GeneratedVisualPayload {
+    data class RasterImage(val bytes: ByteArray) : GeneratedVisualPayload()
+    data class FallbackSvg(val svgMarkup: String) : GeneratedVisualPayload()
 }
 
 data class WordMeaning(
@@ -101,7 +128,8 @@ data class StructuredConceptStep(
     val predictionPrompt: String? = null,
     val predictionOptions: List<String> = emptyList(),
     val memoryPicture: String? = null,
-    val storyThreadSummary: String? = null
+    val storyThreadSummary: String? = null,
+    val visualAid: ConceptVisualAid = ConceptVisualAid()
 )
 
 data class SessionRecap(

@@ -9,13 +9,19 @@ import com.bunde.learning.data.model.SubtopicNode
 import com.bunde.learning.data.model.TopicMap
 import com.bunde.learning.domain.ai.EvaluationVerdict
 import com.bunde.learning.domain.ai.GeminiResult
+import com.bunde.learning.domain.ai.GeneratedVisualPayload
 import com.bunde.learning.domain.ai.StructuredActivity
 import com.bunde.learning.domain.ai.StructuredAnswerEvaluation
 import com.bunde.learning.domain.ai.StructuredConceptStep
+import com.bunde.learning.domain.ai.VisualAidType
+import com.bunde.learning.util.VisualRenderer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Explicit Finite State Machine for Lesson Progression.
@@ -63,6 +69,9 @@ data class TutorUiState(
     val recentlyUsedActivityTypes: List<String> = emptyList(),
     val interruptions: List<TutorInterruptionItem> = emptyList(),
     val isInterruptionLoading: Boolean = false,
+    val isVisualLoading: Boolean = false,
+    val visualImageBytes: ByteArray? = null,
+    val visualFallbackSvg: String? = null,
     val errorMessage: String? = null
 )
 
@@ -77,6 +86,7 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
     val uiState: StateFlow<TutorUiState> = _uiState.asStateFlow()
 
     private var apiKey: String = ""
+    private var visualFetchJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -94,6 +104,7 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
             _uiState.value = _uiState.value.copy(phase = LessonPhase.LOADING_TOPIC, errorMessage = null)
             val loaded = storage.loadTopicMap(topicId)
             if (loaded != null && loaded.subtopics.isNotEmpty()) {
+                visualFetchJob?.cancel()
                 val firstConcept = loaded.subtopics.first()
                 _uiState.value = _uiState.value.copy(
                     topicMap = loaded,
@@ -106,6 +117,9 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
                     previousStoryThread = null,
                     sessionRecap = null,
                     conceptsCompletedThisSession = 0,
+                    isVisualLoading = false,
+                    visualImageBytes = null,
+                    visualFallbackSvg = null,
                     attemptNumber = 1,
                     struggleCount = 0
                 )
@@ -123,6 +137,7 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
      * Start teaching a specific concept by index.
      */
     private fun startConcept(concept: SubtopicNode, index: Int, map: TopicMap) {
+        visualFetchJob?.cancel()
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 phase = LessonPhase.EXPLANATION,
@@ -131,6 +146,9 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
                 evaluationResult = null,
                 studentAnswerInput = "",
                 selectedPredictionGuess = null,
+                isVisualLoading = false,
+                visualImageBytes = null,
+                visualFallbackSvg = null,
                 attemptNumber = 1,
                 errorMessage = null
             )
@@ -172,6 +190,10 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
                         currentActivity = step.activity,
                         recentlyUsedActivityTypes = updatedRecentTypes
                     )
+
+                    if (step.visualAid.type == VisualAidType.GENERATED_IMAGE && !step.visualAid.imagePrompt.isNullOrBlank()) {
+                        fetchConceptVisualAsync(map, concept, step)
+                    }
                 }
                 is GeminiResult.Error -> {
                     // Safe, simple-English local recovery
@@ -196,6 +218,82 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
                     )
                 }
                 is GeminiResult.Loading -> {}
+            }
+        }
+    }
+
+    private fun fetchConceptVisualAsync(
+        map: TopicMap,
+        concept: SubtopicNode,
+        step: StructuredConceptStep
+    ) {
+        val imagePrompt = step.visualAid.imagePrompt ?: return
+        val cacheKey = "${map.topicId}_${concept.id}_${imagePrompt.hashCode()}"
+        visualFetchJob = viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isVisualLoading = true)
+
+            val cachedBytes = withContext(Dispatchers.IO) {
+                VisualRenderer.loadCachedImageBytes(app, cacheKey)
+            }
+            if (cachedBytes != null) {
+                if (_uiState.value.currentStep?.conceptId == step.conceptId) {
+                    _uiState.value = _uiState.value.copy(
+                        isVisualLoading = false,
+                        visualImageBytes = cachedBytes
+                    )
+                }
+                return@launch
+            }
+
+            val cachedSvg = withContext(Dispatchers.IO) {
+                VisualRenderer.loadCachedSvg(app, cacheKey)
+            }
+            if (cachedSvg != null) {
+                if (_uiState.value.currentStep?.conceptId == step.conceptId) {
+                    _uiState.value = _uiState.value.copy(
+                        isVisualLoading = false,
+                        visualFallbackSvg = cachedSvg
+                    )
+                }
+                return@launch
+            }
+
+            val result = gemini.generateConceptVisualImage(
+                apiKey = apiKey,
+                subject = map.subject,
+                topic = map.topicName,
+                conceptTitle = concept.title,
+                imagePrompt = imagePrompt
+            )
+
+            if (_uiState.value.currentStep?.conceptId != step.conceptId) return@launch
+
+            when (result) {
+                is GeminiResult.Success -> {
+                    when (val payload = result.data) {
+                        is GeneratedVisualPayload.RasterImage -> {
+                            withContext(Dispatchers.IO) {
+                                VisualRenderer.saveCachedImageBytes(app, cacheKey, payload.bytes)
+                            }
+                            _uiState.value = _uiState.value.copy(
+                                isVisualLoading = false,
+                                visualImageBytes = payload.bytes
+                            )
+                        }
+                        is GeneratedVisualPayload.FallbackSvg -> {
+                            withContext(Dispatchers.IO) {
+                                VisualRenderer.saveCachedSvg(app, cacheKey, payload.svgMarkup)
+                            }
+                            _uiState.value = _uiState.value.copy(
+                                isVisualLoading = false,
+                                visualFallbackSvg = payload.svgMarkup
+                            )
+                        }
+                    }
+                }
+                else -> {
+                    _uiState.value = _uiState.value.copy(isVisualLoading = false)
+                }
             }
         }
     }
@@ -331,6 +429,7 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
         val completedInSession = state.conceptsCompletedThisSession + 1
 
         if (nextIndex < map.subtopics.size) {
+            visualFetchJob?.cancel()
             val nextConcept = map.subtopics[nextIndex]
             val shouldShowRecapBreak = completedInSession % 3 == 0
 
@@ -345,6 +444,9 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
                 evaluationResult = null,
                 studentAnswerInput = "",
                 selectedPredictionGuess = null,
+                isVisualLoading = false,
+                visualImageBytes = null,
+                visualFallbackSvg = null,
                 attemptNumber = 1,
                 struggleCount = 0
             )

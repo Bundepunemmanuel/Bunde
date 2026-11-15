@@ -1,9 +1,11 @@
 package com.bunde.learning.ui.screens.tutor
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.Psychology
@@ -21,25 +24,36 @@ import androidx.compose.material.icons.outlined.Quiz
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.School
 import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.ZoomIn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.bunde.learning.domain.ai.ConceptVisualAid
 import com.bunde.learning.domain.ai.EvaluationVerdict
 import com.bunde.learning.domain.ai.SessionRecap
 import com.bunde.learning.domain.ai.StructuredActivity
 import com.bunde.learning.domain.ai.StructuredAnswerEvaluation
 import com.bunde.learning.domain.ai.StructuredConceptStep
+import com.bunde.learning.domain.ai.VisualAidType
 import com.bunde.learning.ui.components.BundeCard
 import com.bunde.learning.ui.components.BundeOutlineButton
 import com.bunde.learning.ui.components.BundePrimaryButton
 import com.bunde.learning.ui.theme.*
+import com.bunde.learning.util.VisualRenderer
 
 @Composable
 fun InteractiveTutorScreen(
@@ -267,7 +281,10 @@ fun InteractiveTutorScreen(
                     ExplanationSection(
                         step = step,
                         conceptIndex = state.currentConceptIndex,
-                        selectedGuess = state.selectedPredictionGuess
+                        selectedGuess = state.selectedPredictionGuess,
+                        isVisualLoading = state.isVisualLoading,
+                        visualImageBytes = state.visualImageBytes,
+                        visualFallbackSvg = state.visualFallbackSvg
                     )
                 }
 
@@ -505,7 +522,10 @@ fun SessionRecapCard(
 fun ExplanationSection(
     step: StructuredConceptStep,
     conceptIndex: Int,
-    selectedGuess: String? = null
+    selectedGuess: String? = null,
+    isVisualLoading: Boolean = false,
+    visualImageBytes: ByteArray? = null,
+    visualFallbackSvg: String? = null
 ) {
     BundeCard(
         backgroundColor = BundeSurface,
@@ -581,6 +601,16 @@ fun ExplanationSection(
             color = BundeTextPrimary,
             lineHeight = 22.sp
         )
+
+        // Labeled Technical Diagram / Hybrid Visual Aid
+        if (step.visualAid.type != VisualAidType.NONE) {
+            ConceptVisualCard(
+                visualAid = step.visualAid,
+                isVisualLoading = isVisualLoading,
+                visualImageBytes = visualImageBytes,
+                visualFallbackSvg = visualFallbackSvg
+            )
+        }
 
         // Small "Meaning of key words" helper when exam/hard words are introduced
         if (step.keyWordMeanings.isNotEmpty()) {
@@ -683,6 +713,219 @@ fun ExplanationSection(
                         color = BundeTextPrimary,
                         lineHeight = 19.sp
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ConceptVisualCard(
+    visualAid: ConceptVisualAid,
+    isVisualLoading: Boolean,
+    visualImageBytes: ByteArray?,
+    visualFallbackSvg: String?
+) {
+    val bitmap: ImageBitmap? = remember(
+        visualAid.type,
+        visualAid.svgMarkup,
+        visualImageBytes,
+        visualFallbackSvg
+    ) {
+        when {
+            visualAid.type == VisualAidType.SVG_DIAGRAM && !visualAid.svgMarkup.isNullOrBlank() ->
+                VisualRenderer.renderSvgToBitmap(visualAid.svgMarkup)?.asImageBitmap()
+            visualImageBytes != null ->
+                VisualRenderer.decodeDownsampledBitmap(visualImageBytes)?.asImageBitmap()
+            !visualFallbackSvg.isNullOrBlank() ->
+                VisualRenderer.renderSvgToBitmap(visualFallbackSvg)?.asImageBitmap()
+            else -> null
+        }
+    }
+
+    if (bitmap == null && !isVisualLoading) return
+
+    var isZoomed by remember { mutableStateOf(false) }
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(BundeBackground)
+            .border(1.dp, BundeBorder, RoundedCornerShape(10.dp))
+            .padding(10.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = visualAid.title.ifBlank { "Labeled Diagram" },
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = BundeHighlight,
+                    modifier = Modifier.weight(1f)
+                )
+                if (bitmap != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { isZoomed = true }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.ZoomIn,
+                            contentDescription = "Enlarge Diagram",
+                            tint = BundeTextSecondary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = "Tap to enlarge",
+                            fontSize = 11.sp,
+                            color = BundeTextSecondary
+                        )
+                    }
+                }
+            }
+
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = visualAid.title.ifBlank { "Concept diagram" },
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 140.dp, max = 240.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.White)
+                        .border(1.dp, BundeBorder.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                        .clickable { isZoomed = true }
+                )
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.White)
+                        .border(1.dp, BundeBorder.copy(alpha = 0.6f), RoundedCornerShape(8.dp)),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = BundeAccent,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Drawing illustration while you read...",
+                        fontSize = 12.sp,
+                        color = BundeTextSecondary
+                    )
+                }
+            }
+
+            if (visualAid.caption.isNotBlank()) {
+                Text(
+                    text = visualAid.caption,
+                    fontSize = 12.sp,
+                    color = BundeTextSecondary,
+                    lineHeight = 17.sp
+                )
+            }
+        }
+    }
+
+    if (isZoomed && bitmap != null) {
+        var scale by remember { mutableFloatStateOf(1f) }
+        var offsetX by remember { mutableFloatStateOf(0f) }
+        var offsetY by remember { mutableFloatStateOf(0f) }
+
+        Dialog(
+            onDismissRequest = { isZoomed = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.88f))
+                    .padding(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = visualAid.title.ifBlank { "Labeled Diagram" },
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = { isZoomed = false }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Close,
+                                contentDescription = "Close",
+                                tint = Color.White
+                            )
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White)
+                            .pointerInput(Unit) {
+                                detectTransformGestures { _, pan, zoom, _ ->
+                                    val newScale = (scale * zoom).coerceIn(1f, 3.5f)
+                                    scale = newScale
+                                    if (newScale > 1f) {
+                                        offsetX += pan.x
+                                        offsetY += pan.y
+                                    } else {
+                                        offsetX = 0f
+                                        offsetY = 0f
+                                    }
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            bitmap = bitmap,
+                            contentDescription = visualAid.title,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(8.dp)
+                                .graphicsLayer(
+                                    scaleX = scale,
+                                    scaleY = scale,
+                                    translationX = offsetX,
+                                    translationY = offsetY
+                                )
+                        )
+                    }
+
+                    if (visualAid.caption.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = visualAid.caption,
+                            fontSize = 13.sp,
+                            color = Color.White.copy(alpha = 0.9f),
+                            lineHeight = 19.sp
+                        )
+                    }
                 }
             }
         }

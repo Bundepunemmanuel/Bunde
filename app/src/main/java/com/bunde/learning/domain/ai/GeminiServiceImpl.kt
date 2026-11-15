@@ -30,9 +30,14 @@ class GeminiServiceImpl : GeminiService {
         "gemini-3.5-flash-lite",
         "gemini-3.6-flash",
         "gemini-3.5-flash",
-        "gemini-3.8-flash",
-        "gemini-flash-latest",
-        "gemini-2.5-flash"
+        "gemini-3.1-flash-lite",
+        "gemini-3.7-flash"
+    )
+
+    private val imageCandidateModels = listOf(
+        "gemini-2.5-flash-image",
+        "gemini-3.1-flash-image",
+        "gemini-3.1-flash-lite-image"
     )
 
     companion object {
@@ -62,9 +67,10 @@ class GeminiServiceImpl : GeminiService {
                - Bad question: "Analyze the implications of Moses' decision in the context of his conflicting cultural identities."
                - Good question: "Why did Moses decide to help the Hebrew man?"
 
-            4. PRESERVE ACADEMIC ACCURACY:
+            4. PRESERVE ACADEMIC ACCURACY & FULL EXAM BREADTH:
                - Simple English must never mean wrong or incomplete facts.
                - Teach accurate definitions, dates, names, events, formulas, and calculation steps.
+               - When a concept covers multiple exam points (causes, reasons, types, features, functions, stages, advantages, or disadvantages), cover ALL 3 to 5 key exam points concisely rather than stopping at just 1 point.
                - When an exam definition matters, give the accurate point and then explain it in everyday English.
                - Distinguish facts from opinions. Follow uploaded student notes faithfully when notes are provided.
                - Never confuse the topic name with the student's name, and never invent personal details about the student.
@@ -325,28 +331,45 @@ class GeminiServiceImpl : GeminiService {
             HOW TO MAKE THIS CONCEPT UNFORGETTABLE (FOLLOW EVERY RULE):
             1. ZERO GREETINGS OR FILLER: Start straight with the teaching. No "Hello", "Welcome", or "Today we will learn".
             2. LEARNING OBJECTIVE ("learningObjective"): 1 short, plain-English line spoken directly TO the student (e.g. "Learn why a company is treated like its own legal person", no ALL-CAPS).
-            3. MINI-STORY HOOK ("storyHook"):
-               - Write 1 to 2 vivid, curious sentences putting real people in a concrete situation BEFORE giving the textbook term.
+            3. CONSISTENT CHARACTERS ACROSS THE LESSON:
+               - Use the EXACT SAME 1 or 2 recurring character names introduced in "storyHook" (or carried over from Story Continuity above) inside "storyHook", "concreteExample", and "activity".
+               - NEVER invent unrelated new character names inside the same concept step.
+            4. MINI-STORY HOOK ("storyHook"):
+               - Write 1 to 2 vivid, curious sentences putting your recurring character(s) in a concrete situation BEFORE giving the textbook term.
                - Example: "Chidi and Musa register a bread bakery together. One day, the bakery owes 300,000 Naira for flour—can the supplier take Musa's personal phone to pay the debt?"
-            4. GUESS FIRST ("predictionPrompt" & "predictionOptions"):
+            5. GUESS FIRST ("predictionPrompt" & "predictionOptions"):
                - If guessing before reading wakes up curiosity (great for concepts, decisions, causes, science predictions, or scenarios), write a short 1-sentence guess question and 2 or 3 very short guess choices (e.g. ["Yes, Musa must pay from his pocket", "No, only the company pays", "Only if Chidi agrees"]).
                - If this step is a pure math formula or step-by-step calculation where guessing doesn't fit, set "predictionPrompt": null and "predictionOptions": [].
-            5. SIMPLE EXPLANATION ("conciseExplanation"):
-               - Write 2 to 3 very short, friendly paragraphs (2 to 3 short sentences per paragraph) that directly answer the hook and teach the exam point.
+            6. SIMPLE EXPLANATION & FULL EXAM BREADTH ("conciseExplanation"):
+               - Write 2 to 3 very short, friendly paragraphs (2 to 3 short sentences per paragraph) that directly answer the hook and teach the complete exam content.
+               - IMPORTANT: If this concept covers multiple causes, reasons, types, features, stages, advantages, or functions, include ALL 3 to 5 key exam points concisely (use clean short bullet lines inside the explanation so the student gets full exam marks). Never stop at just 1 point when exams expect 3–5 points!
                - Explain any hard or exam word immediately right after using it in everyday English.
                - Keep accurate facts, dates, names, and formulas. Adapt naturally to $subject.
-            6. MEANING OF KEY WORDS ("keyWordMeanings"):
+            7. HYBRID VISUAL AID ("visualAid"):
+               - Choose the best visual type for THIS specific concept:
+                 * "NONE": When a visual adds no real learning value (e.g., grammar rules, vocabulary, short definitions, or pure story concepts). Set "svgMarkup": null, "imagePrompt": null.
+                 * "SVG_DIAGRAM": Best for graphs, supply/demand curves, charts, labeled schematics, cycles, circuits, timelines, flowcharts, biology/physics/chemistry diagrams, or geometry figures. Provide clean, standalone SVG markup in "svgMarkup" and "imagePrompt": null.
+                   SVG DESIGN RULES (STRICT):
+                   - Root tag MUST be <svg viewBox="0 0 420 260" xmlns="http://www.w3.org/2000/svg"> with a light background <rect width="420" height="260" fill="#FFFFFF" rx="10"/>.
+                   - Use clear vector shapes, arrows, and concise text labels (font-family="sans-serif", font-size="11" to "13", fill="#242321").
+                   - Palette: primary text/lines "#242321", terracotta "#C0584A", slate blue "#2C5E7A", sage green "#437A57", warm paper "#F2EEE4".
+                   - Keep labels well-spaced inside 20..400 horizontally and 20..245 vertically so NO text overlaps or gets clipped.
+                   - NEVER use <script>, <foreignObject>, external links, or unescaped "&" characters.
+                 * "GENERATED_IMAGE": Best ONLY when a rich real-world scene, natural phenomenon, historical setting, landform, or ecosystem builds stronger visual memory than boxes/arrows (e.g. river meander, volcano cross-section scene, savannah food web habitat). Set "svgMarkup": null and write a clear 1-2 sentence educational illustration description in "imagePrompt".
+            8. MEANING OF KEY WORDS ("keyWordMeanings"):
                - List 0 to 3 important exam or hard words from this step with their simple 1-sentence meanings.
-            7. MOVIE-SCENE EXAMPLE ("concreteExample"):
-               - Write 1 vivid mini-scene with clear characters, action, and outcome (or a clear step-by-step worked example for Math/Science) that makes the idea easy to picture.
-            8. PICTURE THIS MEMORY ANCHOR ("memoryPicture"):
-               - Write 1 memorable, easy-to-picture mental image tying the term to the scene (e.g., "Picture a registered company like a separate invisible person holding its own wallet—separate from the owners' pockets.").
-            9. NEXT-EPISODE THREAD ("storyThreadSummary"):
-               - Write 1 short sentence summarizing the story or key idea so the next concept can pick up cleanly from here.
-            10. EASY-TO-UNDERSTAND CHECK QUESTION ("activity"):
-               - Ask ONE clear, direct question in simple English that tests this exact concept.
-               - NEVER ask generic questions like "What did you learn?", "Do you understand?", or "Explain this in your own words."
-               - Choose from: "SCENARIO", "ERROR_DETECTION", "PREDICTION", "STEP_SOLVE", "COMPARISON", "CAUSE_EFFECT", or "CALCULATION".
+            9. MOVIE-SCENE EXAMPLE ("concreteExample"):
+               - Write 1 vivid mini-scene continuing with the SAME character(s) from the hook (or a clear step-by-step worked example for Math/Science) that makes the idea easy to picture.
+            10. PICTURE THIS MEMORY ANCHOR ("memoryPicture"):
+                - Write 1 memorable, easy-to-picture mental image tying the term to the scene (e.g., "Picture a registered company like a separate invisible person holding its own wallet—separate from the owners' pockets.").
+            11. NEXT-EPISODE THREAD ("storyThreadSummary"):
+                - Write 1 short sentence summarizing the story, recurring character(s), and key idea so the next concept continues the same story seamlessly.
+            12. NON-OVERLAPPING CHECK QUESTION ("activity"):
+                - Ask ONE clear, direct question in simple English that tests this exact concept.
+                - IMPORTANT: If you included a "predictionPrompt" above, "activity.question" MUST test a DIFFERENT, deeper, or applied angle (such as applying the rule to a new twist, explaining why, identifying all causes/parts, comparing/contrasting cases, or spotting a mistake). NEVER repeat or rephrase the Guess First question, and NEVER let both ask to name the same term!
+                - Keep using the same recurring character(s) where a scenario is used.
+                - NEVER ask generic questions like "What did you learn?", "Do you understand?", or "Explain this in your own words."
+                - Choose from: "SCENARIO", "ERROR_DETECTION", "PREDICTION", "STEP_SOLVE", "COMPARISON", "CAUSE_EFFECT", or "CALCULATION".
 
             Return strictly a JSON object with this exact structure:
             {
@@ -355,19 +378,26 @@ class GeminiServiceImpl : GeminiService {
               "storyHook": "1-2 sentence relatable mini-scene or curiosity dilemma.",
               "predictionPrompt": "Short 1-sentence question asking the student to guess before reading (or null)",
               "predictionOptions": ["Short guess A", "Short guess B"],
-              "conciseExplanation": "2-3 short paragraphs in everyday English explaining one idea clearly.",
+              "conciseExplanation": "2-3 short paragraphs (and concise numbered/bulleted exam points if covering multiple causes/types/features) in everyday English.",
+              "visualAid": {
+                "type": "NONE",
+                "title": "",
+                "caption": "",
+                "svgMarkup": null,
+                "imagePrompt": null
+              },
               "keyWordMeanings": [
                 {
                   "word": "Important Term",
                   "meaning": "Simple everyday meaning of this word."
                 }
               ],
-              "concreteExample": "One vivid, relatable mini-scene or step-by-step worked example.",
+              "concreteExample": "One vivid, relatable mini-scene (same characters) or step-by-step worked example.",
               "memoryPicture": "One short mental picture so the student never forgets this concept.",
-              "storyThreadSummary": "One short sentence connecting this episode to the next concept.",
+              "storyThreadSummary": "One short sentence connecting this episode and its characters to the next concept.",
               "activity": {
                 "type": "SCENARIO",
-                "question": "One short, clear question testing this concept",
+                "question": "One short, clear question testing a fresh/applied angle of this concept",
                 "options": [],
                 "expectedAnswerCriteria": "Simple summary of the key idea the student should give",
                 "hint": "A gentle, plain-English clue if the student gets stuck"
@@ -380,7 +410,7 @@ class GeminiServiceImpl : GeminiService {
             val jsonRoot = parseJsonWithRegeneration(
                 apiKey = apiKey,
                 rawResponse = responseText,
-                schemaHint = """{"conceptId": String, "learningObjective": String, "storyHook": String?, "predictionPrompt": String?, "predictionOptions": [String], "conciseExplanation": String, "keyWordMeanings": [{"word": String, "meaning": String}], "concreteExample": String, "memoryPicture": String?, "storyThreadSummary": String?, "activity": {"type": String, "question": String, "options": [String], "expectedAnswerCriteria": String, "hint": String}}"""
+                schemaHint = """{"conceptId": String, "learningObjective": String, "storyHook": String?, "predictionPrompt": String?, "predictionOptions": [String], "conciseExplanation": String, "visualAid": {"type": String, "title": String, "caption": String, "svgMarkup": String?, "imagePrompt": String?}, "keyWordMeanings": [{"word": String, "meaning": String}], "concreteExample": String, "memoryPicture": String?, "storyThreadSummary": String?, "activity": {"type": String, "question": String, "options": [String], "expectedAnswerCriteria": String, "hint": String}}"""
             )
             val actObj = jsonRoot.optJSONObject("activity") ?: JSONObject()
 
@@ -428,6 +458,33 @@ class GeminiServiceImpl : GeminiService {
             val rawMemPic = jsonRoot.optString("memoryPicture", "").trim()
             val rawThread = jsonRoot.optString("storyThreadSummary", "").trim()
 
+            val visualObj = jsonRoot.optJSONObject("visualAid")
+            val parsedVisualAid = if (visualObj != null) {
+                val typeStr = visualObj.optString("type", "NONE").trim().uppercase()
+                val rawType = runCatching { VisualAidType.valueOf(typeStr) }.getOrDefault(VisualAidType.NONE)
+                val vTitle = cleanHeading(visualObj.optString("title", ""))
+                val vCaption = visualObj.optString("caption", "").trim()
+                val rawSvg = visualObj.optString("svgMarkup", "").trim()
+                    .takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+                val rawImgPrompt = visualObj.optString("imagePrompt", "").trim()
+                    .takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+
+                val finalType = when (rawType) {
+                    VisualAidType.SVG_DIAGRAM -> if (rawSvg != null && rawSvg.contains("<svg", ignoreCase = true)) VisualAidType.SVG_DIAGRAM else VisualAidType.NONE
+                    VisualAidType.GENERATED_IMAGE -> if (rawImgPrompt != null) VisualAidType.GENERATED_IMAGE else VisualAidType.NONE
+                    VisualAidType.NONE -> VisualAidType.NONE
+                }
+                ConceptVisualAid(
+                    type = finalType,
+                    title = vTitle,
+                    caption = vCaption,
+                    svgMarkup = if (finalType == VisualAidType.SVG_DIAGRAM) rawSvg else null,
+                    imagePrompt = if (finalType == VisualAidType.GENERATED_IMAGE) rawImgPrompt else null
+                )
+            } else {
+                ConceptVisualAid()
+            }
+
             val step = StructuredConceptStep(
                 conceptId = jsonRoot.optString("conceptId", conceptId),
                 learningObjective = cleanHeading(jsonRoot.optString("learningObjective", "Understand $conceptTitle")),
@@ -439,7 +496,8 @@ class GeminiServiceImpl : GeminiService {
                 predictionPrompt = if (rawPredPrompt.isBlank() || rawPredPrompt.equals("null", ignoreCase = true) || predOptionsList.isEmpty()) null else rawPredPrompt,
                 predictionOptions = predOptionsList,
                 memoryPicture = if (rawMemPic.isBlank() || rawMemPic.equals("null", ignoreCase = true)) null else rawMemPic,
-                storyThreadSummary = if (rawThread.isBlank() || rawThread.equals("null", ignoreCase = true)) null else rawThread
+                storyThreadSummary = if (rawThread.isBlank() || rawThread.equals("null", ignoreCase = true)) null else rawThread,
+                visualAid = parsedVisualAid
             )
             GeminiResult.Success(step)
         } catch (e: Exception) {
@@ -706,6 +764,111 @@ class GeminiServiceImpl : GeminiService {
         }
     }
 
+    override suspend fun generateConceptVisualImage(
+        apiKey: String,
+        subject: String,
+        topic: String,
+        conceptTitle: String,
+        imagePrompt: String
+    ): GeminiResult<GeneratedVisualPayload> = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank()) {
+            return@withContext GeminiResult.Error("API key missing.", isKeyMissing = true)
+        }
+
+        val styledPrompt = """
+            Create a clean, bright, secondary-school textbook educational illustration for $subject ($topic — $conceptTitle).
+            Scene to illustrate: $imagePrompt
+            Style: Clear scientific/educational diagram illustration on a clean warm-light background, crisp lines, simple clear visual details, no clutter or dark neon effects.
+        """.trimIndent()
+
+        for (modelName in imageCandidateModels) {
+            try {
+                val url = "https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey"
+                val payload = JSONObject().apply {
+                    put("contents", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("parts", JSONArray().apply {
+                                put(JSONObject().apply { put("text", styledPrompt) })
+                            })
+                        })
+                    })
+                    put("generationConfig", JSONObject().apply {
+                        put("responseModalities", JSONArray().apply { put("IMAGE") })
+                    })
+                }
+                val requestBody = payload.toString().toRequestBody(jsonMediaType)
+                val request = Request.Builder().url(url).post(requestBody).build()
+                val response = client.newCall(request).execute()
+
+                if (!response.isSuccessful) {
+                    val code = response.code
+                    response.close()
+                    if (code == 404 || code == 400 || code == 429 || code == 503) {
+                        continue
+                    }
+                    break
+                }
+
+                val body = response.body?.string()
+                response.close()
+                if (body.isNullOrBlank()) continue
+
+                val root = JSONObject(body)
+                val candidates = root.optJSONArray("candidates") ?: continue
+                if (candidates.length() == 0) continue
+                val parts = candidates.getJSONObject(0).optJSONObject("content")?.optJSONArray("parts") ?: continue
+
+                for (i in 0 until parts.length()) {
+                    val part = parts.optJSONObject(i) ?: continue
+                    val inlineObj = part.optJSONObject("inlineData") ?: part.optJSONObject("inline_data")
+                    val base64Data = inlineObj?.optString("data", "")?.trim()
+                    if (!base64Data.isNullOrBlank()) {
+                        val bytes = Base64.decode(base64Data, Base64.DEFAULT)
+                        if (bytes.isNotEmpty()) {
+                            return@withContext GeminiResult.Success(GeneratedVisualPayload.RasterImage(bytes))
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                // Try next image model or fall back to labeled SVG
+            }
+        }
+
+        // Graceful fallback for free-tier keys (429 quota) or unavailable image models: generate a clean labeled SVG diagram
+        return@withContext try {
+            val svgFallbackPrompt = """
+                Draw a clean, labeled educational SVG diagram for a $subject lesson on "$topic" (Concept: "$conceptTitle").
+                Visual description to illustrate clearly: $imagePrompt
+
+                RULES (STRICT):
+                1. Root tag MUST be <svg viewBox="0 0 420 260" xmlns="http://www.w3.org/2000/svg"> with <rect width="420" height="260" fill="#FFFFFF" rx="10"/>.
+                2. Draw clear shapes, arrows, and concise labels (font-family="sans-serif", font-size="11" to "13", fill="#242321").
+                3. Use warm educational colors: "#242321", "#C0584A", "#2C5E7A", "#437A57", "#F2EEE4".
+                4. Keep all shapes and labels inside 16..404 horizontally and 18..246 vertically so nothing overlaps or clips.
+                5. NO <script>, NO <foreignObject>, NO unescaped "&".
+
+                Return strictly JSON:
+                {
+                  "svgMarkup": "<svg viewBox=\"0 0 420 260\" xmlns=\"http://www.w3.org/2000/svg\">...</svg>"
+                }
+            """.trimIndent()
+            val responseText = executeGeminiPrompt(apiKey, svgFallbackPrompt, emptyList())
+            val jsonRoot = parseJsonWithRegeneration(
+                apiKey = apiKey,
+                rawResponse = responseText,
+                schemaHint = """{"svgMarkup": String}"""
+            )
+            val svg = jsonRoot.optString("svgMarkup", "").trim()
+            if (svg.contains("<svg", ignoreCase = true)) {
+                GeminiResult.Success(GeneratedVisualPayload.FallbackSvg(svg))
+            } else {
+                GeminiResult.Error("Visual illustration unavailable right now.")
+            }
+        } catch (e: Exception) {
+            GeminiResult.Error("Could not generate visual illustration: ${e.localizedMessage}")
+        }
+    }
+
     /**
      * Parses Gemini JSON robustly and runs one regeneration/recovery prompt if formatting broke.
      */
@@ -788,7 +951,7 @@ class GeminiServiceImpl : GeminiService {
                     response.close()
                     val ex = IOException("Gemini API error code ${response.code}: $errorBody")
                     lastException = ex
-                    if (response.code == 404 || response.code == 400) {
+                    if (response.code == 404 || response.code == 400 || response.code == 429 || response.code == 503) {
                         continue
                     } else {
                         throw ex
@@ -809,7 +972,8 @@ class GeminiServiceImpl : GeminiService {
                 }
             } catch (e: Exception) {
                 lastException = e
-                if (e.message?.contains("404") != true && e.message?.contains("400") != true) {
+                val msg = e.message ?: ""
+                if (!msg.contains("404") && !msg.contains("400") && !msg.contains("429") && !msg.contains("503")) {
                     throw e
                 }
             }
