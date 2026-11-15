@@ -120,8 +120,9 @@ class LocalStorageManager(private val context: Context) {
                 subtopicTitle = "Reasons for Privatization",
                 prompt = "Why do governments sometimes sell public companies to private owners?",
                 expectedAnswer = "To reduce government debt and help the company run better and faster.",
+                memoryCue = "Picture a government bus company whose buses keep breaking down until a private owner buys and fixes them to earn profit.",
                 intervalDays = 3,
-                dueDate = System.currentTimeMillis() + 1000 * 60 * 60 * 2,
+                dueDate = System.currentTimeMillis() - 1000 * 60 * 30,
                 isWeakArea = true
             ),
             RevisionItem(
@@ -131,6 +132,7 @@ class LocalStorageManager(private val context: Context) {
                 subtopicTitle = "Stages of Mitosis",
                 prompt = "In which stage of mitosis do sister chromatids pull apart toward opposite poles?",
                 expectedAnswer = "Anaphase",
+                memoryCue = "Remember 'A' in Anaphase stands for 'Apart' — the paired chromosomes pull Apart to opposite sides.",
                 intervalDays = 7,
                 dueDate = System.currentTimeMillis() + 1000 * 60 * 60 * 24,
                 isWeakArea = false

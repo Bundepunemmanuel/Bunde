@@ -80,6 +80,7 @@ data class RevisionItem(
     val subtopicTitle: String,
     val prompt: String,
     val expectedAnswer: String,
+    val memoryCue: String? = null,
     val intervalDays: Int = 1,
     val repetitionLevel: Int = 0,
     val dueDate: Long = System.currentTimeMillis(),

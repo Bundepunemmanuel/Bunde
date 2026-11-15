@@ -26,8 +26,10 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -53,6 +55,8 @@ import com.bunde.learning.ui.theme.BundeAccent
 import com.bunde.learning.ui.theme.BundeAccentLight
 import com.bunde.learning.ui.theme.BundeBackground
 import com.bunde.learning.ui.theme.BundeBorder
+import com.bunde.learning.ui.theme.BundeHighlight
+import com.bunde.learning.ui.theme.BundeHighlightLight
 import com.bunde.learning.ui.theme.BundeSuccess
 import com.bunde.learning.ui.theme.BundeSuccessLight
 import com.bunde.learning.ui.theme.BundeTextMuted
@@ -68,14 +72,20 @@ fun RevisionScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     var isPracticeActive by remember { mutableStateOf(false) }
+    var practiceAllMode by remember { mutableStateOf(false) }
     var currentCardIndex by remember { mutableIntStateOf(0) }
     var isAnswerRevealed by remember { mutableStateOf(false) }
+    var isMemoryClueShown by remember { mutableStateOf(false) }
+    var recallAttemptText by remember { mutableStateOf("") }
 
-    val revisionList = state.revisionItems
+    val now = System.currentTimeMillis()
+    val allCards = state.revisionItems
+    val dueCards = remember(allCards) { allCards.filter { it.dueDate <= now } }
+    val activeSessionCards = if (practiceAllMode) allCards else dueCards.ifEmpty { allCards }
 
-    if (isPracticeActive && revisionList.isNotEmpty()) {
-        if (currentCardIndex < revisionList.size) {
-            val currentCard = revisionList[currentCardIndex]
+    if (isPracticeActive && activeSessionCards.isNotEmpty()) {
+        if (currentCardIndex < activeSessionCards.size) {
+            val currentCard = activeSessionCards[currentCardIndex]
 
             Column(
                 modifier = modifier
@@ -98,7 +108,7 @@ fun RevisionScreen(
                             letterSpacing = 0.5.sp
                         )
                         Text(
-                            text = "Card ${currentCardIndex + 1} of ${revisionList.size}",
+                            text = "Card ${currentCardIndex + 1} of ${activeSessionCards.size}",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = BundeTextPrimary
@@ -116,7 +126,7 @@ fun RevisionScreen(
 
                 // Linear Progress
                 LinearProgressIndicator(
-                    progress = { (currentCardIndex + 1).toFloat() / revisionList.size.toFloat() },
+                    progress = { (currentCardIndex + 1).toFloat() / activeSessionCards.size.toFloat() },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(4.dp)
@@ -154,7 +164,7 @@ fun RevisionScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "Subtopic: ${currentCard.subtopicTitle}",
+                        text = "Part: ${currentCard.subtopicTitle}",
                         fontSize = 12.sp,
                         color = BundeTextSecondary
                     )
@@ -170,12 +180,60 @@ fun RevisionScreen(
                         lineHeight = 24.sp
                     )
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                    // Reveal Answer Toggle
+                    // Active recall input before peeking
                     if (!isAnswerRevealed) {
-                        BundeOutlineButton(
-                            text = "Reveal Answer",
+                        OutlinedTextField(
+                            value = recallAttemptText,
+                            onValueChange = { recallAttemptText = it },
+                            placeholder = { Text("Try explaining it from memory first...", fontSize = 13.sp) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 72.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            maxLines = 3
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        if (isMemoryClueShown && !currentCard.memoryCue.isNullOrBlank()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(BundeHighlightLight)
+                                    .border(1.dp, BundeHighlight.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
+                                    .padding(12.dp)
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Memory Picture Clue:",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = BundeHighlight
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = currentCard.memoryCue,
+                                        fontSize = 13.sp,
+                                        color = BundeTextPrimary,
+                                        lineHeight = 19.sp
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
+
+                        if (!isMemoryClueShown && !currentCard.memoryCue.isNullOrBlank()) {
+                            BundeOutlineButton(
+                                text = "Show Story Clue First",
+                                onClick = { isMemoryClueShown = true }
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+
+                        BundePrimaryButton(
+                            text = "Check / Reveal Answer",
                             onClick = { isAnswerRevealed = true }
                         )
                     } else {
@@ -190,7 +248,7 @@ fun RevisionScreen(
                         ) {
                             Column {
                                 Text(
-                                    text = "Expected Answer:",
+                                    text = "Key Answer:",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = BundeSuccess
@@ -203,13 +261,22 @@ fun RevisionScreen(
                                     color = BundeTextPrimary,
                                     lineHeight = 20.sp
                                 )
+                                if (!currentCard.memoryCue.isNullOrBlank()) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Story Picture: ${currentCard.memoryCue}",
+                                        fontSize = 12.sp,
+                                        color = BundeTextSecondary,
+                                        lineHeight = 17.sp
+                                    )
+                                }
                             }
                         }
 
                         Spacer(modifier = Modifier.height(20.dp))
 
                         Text(
-                            text = "How well did you recall this?",
+                            text = "How easily did you remember this?",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = BundeTextPrimary
@@ -229,6 +296,8 @@ fun RevisionScreen(
                                 onClick = {
                                     viewModel.processRecallResult(currentCard, 1)
                                     isAnswerRevealed = false
+                                    isMemoryClueShown = false
+                                    recallAttemptText = ""
                                     currentCardIndex++
                                 }
                             )
@@ -239,6 +308,8 @@ fun RevisionScreen(
                                 onClick = {
                                     viewModel.processRecallResult(currentCard, 2)
                                     isAnswerRevealed = false
+                                    isMemoryClueShown = false
+                                    recallAttemptText = ""
                                     currentCardIndex++
                                 }
                             )
@@ -249,6 +320,8 @@ fun RevisionScreen(
                                 onClick = {
                                     viewModel.processRecallResult(currentCard, 3)
                                     isAnswerRevealed = false
+                                    isMemoryClueShown = false
+                                    recallAttemptText = ""
                                     currentCardIndex++
                                 }
                             )
@@ -259,6 +332,8 @@ fun RevisionScreen(
                                 onClick = {
                                     viewModel.processRecallResult(currentCard, 4)
                                     isAnswerRevealed = false
+                                    isMemoryClueShown = false
+                                    recallAttemptText = ""
                                     currentCardIndex++
                                 }
                             )
@@ -303,7 +378,7 @@ fun RevisionScreen(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = "You reviewed all ${revisionList.size} cards. Spaced repetition schedules have been updated.",
+                    text = "You reviewed all ${activeSessionCards.size} cards. Spaced repetition schedules have been updated.",
                     fontSize = 13.sp,
                     color = BundeTextSecondary,
                     lineHeight = 18.sp
@@ -317,6 +392,8 @@ fun RevisionScreen(
                         isPracticeActive = false
                         currentCardIndex = 0
                         isAnswerRevealed = false
+                        isMemoryClueShown = false
+                        recallAttemptText = ""
                     }
                 )
             }
@@ -345,12 +422,56 @@ fun RevisionScreen(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
 
-                if (revisionList.isNotEmpty()) {
+                if (dueCards.isNotEmpty()) {
                     BundePrimaryButton(
-                        text = "Start Quick Recall (${revisionList.size} cards ready)",
+                        text = "Start Due Recall (${dueCards.size} due today)",
                         onClick = {
+                            practiceAllMode = false
                             currentCardIndex = 0
                             isAnswerRevealed = false
+                            isMemoryClueShown = false
+                            recallAttemptText = ""
+                            isPracticeActive = true
+                        }
+                    )
+                    if (allCards.size > dueCards.size) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        BundeOutlineButton(
+                            text = "Practice All Saved Cards (${allCards.size})",
+                            onClick = {
+                                practiceAllMode = true
+                                currentCardIndex = 0
+                                isAnswerRevealed = false
+                                isMemoryClueShown = false
+                                recallAttemptText = ""
+                                isPracticeActive = true
+                            }
+                        )
+                    }
+                } else if (allCards.isNotEmpty()) {
+                    BundeCard(backgroundColor = BundeSuccessLight) {
+                        Text(
+                            text = "All caught up for today!",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = BundeSuccess
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "You have ${allCards.size} saved card(s) scheduled for upcoming days.",
+                            fontSize = 12.sp,
+                            color = BundeTextPrimary
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    BundeOutlineButton(
+                        text = "Practice Upcoming Cards (${allCards.size})",
+                        onClick = {
+                            practiceAllMode = true
+                            currentCardIndex = 0
+                            isAnswerRevealed = false
+                            isMemoryClueShown = false
+                            recallAttemptText = ""
                             isPracticeActive = true
                         }
                     )
@@ -372,7 +493,7 @@ fun RevisionScreen(
                 Spacer(modifier = Modifier.height(4.dp))
             }
 
-            items(revisionList) { item ->
+            items(allCards) { item ->
                 RevisionCardRow(item)
             }
         }

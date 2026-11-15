@@ -16,9 +16,11 @@ import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Quiz
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.School
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bunde.learning.domain.ai.EvaluationVerdict
+import com.bunde.learning.domain.ai.SessionRecap
 import com.bunde.learning.domain.ai.StructuredActivity
 import com.bunde.learning.domain.ai.StructuredAnswerEvaluation
 import com.bunde.learning.domain.ai.StructuredConceptStep
@@ -208,7 +211,7 @@ fun InteractiveTutorScreen(
             }
 
             // Phase: LOADING_TOPIC or EXPLANATION (Skeleton / Loader)
-            if (state.phase == LessonPhase.LOADING_TOPIC || (state.phase == LessonPhase.EXPLANATION && state.currentStep == null)) {
+            if (state.phase == LessonPhase.LOADING_TOPIC || (state.phase == LessonPhase.EXPLANATION && state.currentStep == null) || state.phase == LessonPhase.NEXT_CONCEPT) {
                 item {
                     BundeCard {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -219,7 +222,7 @@ fun InteractiveTutorScreen(
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                text = "Preparing Concept ${state.currentConceptIndex + 1}: ${state.currentSubtopic?.title ?: ""}...",
+                                text = "Preparing Part ${state.currentConceptIndex + 1}: ${state.currentSubtopic?.title ?: ""}...",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = BundeTextSecondary
@@ -229,11 +232,43 @@ fun InteractiveTutorScreen(
                 }
             }
 
-            // Phase: Active Step (Explanation + Real-world Example)
-            val step = state.currentStep
-            if (step != null && state.phase != LessonPhase.LESSON_COMPLETED) {
+            // Phase: SESSION_RECAP (30-second "Story So Far" break card after every 3 concepts)
+            if (state.phase == LessonPhase.SESSION_RECAP) {
                 item {
-                    ExplanationSection(step = step, conceptIndex = state.currentConceptIndex)
+                    SessionRecapCard(
+                        recap = state.sessionRecap,
+                        completedCount = state.conceptsCompletedThisSession,
+                        onContinueLesson = { viewModel.continueFromRecap() },
+                        onTakeBreak = onBackClick
+                    )
+                }
+            }
+
+            // Phase: PREDICTION_HOOK (Mini-story hook + quick guess BEFORE explanation)
+            val step = state.currentStep
+            if (step != null && state.phase == LessonPhase.PREDICTION_HOOK) {
+                item {
+                    PredictionHookCard(
+                        step = step,
+                        conceptIndex = state.currentConceptIndex,
+                        onGuessSelected = { guess -> viewModel.submitPredictionGuess(guess) },
+                        onSkipToExplanation = { viewModel.skipPredictionToExplanation() }
+                    )
+                }
+            }
+
+            // Phase: Active Step (Explanation + Story Anchor + Real-world Example)
+            if (step != null &&
+                state.phase != LessonPhase.LESSON_COMPLETED &&
+                state.phase != LessonPhase.PREDICTION_HOOK &&
+                state.phase != LessonPhase.SESSION_RECAP
+            ) {
+                item {
+                    ExplanationSection(
+                        step = step,
+                        conceptIndex = state.currentConceptIndex,
+                        selectedGuess = state.selectedPredictionGuess
+                    )
                 }
 
                 // Phase: Activity Challenge Card
@@ -278,7 +313,200 @@ fun InteractiveTutorScreen(
 }
 
 @Composable
-fun ExplanationSection(step: StructuredConceptStep, conceptIndex: Int) {
+fun PredictionHookCard(
+    step: StructuredConceptStep,
+    conceptIndex: Int,
+    onGuessSelected: (String) -> Unit,
+    onSkipToExplanation: () -> Unit
+) {
+    BundeCard(
+        backgroundColor = BundeSurface,
+        borderColor = BundeAccent.copy(alpha = 0.45f)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(BundeAccent),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "${conceptIndex + 1}",
+                    color = BundeSurface,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+                Text(
+                    text = "QUICK GUESS FIRST",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = BundeAccent,
+                    letterSpacing = 0.5.sp
+                )
+                Text(
+                    text = step.learningObjective,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = BundeTextPrimary
+                )
+            }
+        }
+
+        if (!step.storyHook.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(BundeHighlightLight)
+                    .border(1.dp, BundeHighlight.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
+                    .padding(12.dp)
+            ) {
+                Text(
+                    text = step.storyHook,
+                    fontSize = 14.sp,
+                    color = BundeTextPrimary,
+                    lineHeight = 21.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Text(
+            text = step.predictionPrompt ?: "What do you think happens next?",
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = BundeTextPrimary,
+            lineHeight = 21.sp
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            step.predictionOptions.forEach { option ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(BundeBackground)
+                        .border(1.dp, BundeBorder, RoundedCornerShape(8.dp))
+                        .clickable { onGuessSelected(option) }
+                        .padding(horizontal = 14.dp, vertical = 12.dp)
+                ) {
+                    Text(
+                        text = option,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = BundeTextPrimary
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text(
+            text = "Not sure? See the explanation →",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = BundeAccent,
+            modifier = Modifier.clickable { onSkipToExplanation() }
+        )
+    }
+}
+
+@Composable
+fun SessionRecapCard(
+    recap: SessionRecap?,
+    completedCount: Int,
+    onContinueLesson: () -> Unit,
+    onTakeBreak: () -> Unit
+) {
+    BundeCard(
+        backgroundColor = BundeSurface,
+        borderColor = BundeHighlight.copy(alpha = 0.4f)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = Icons.Outlined.Psychology,
+                contentDescription = "Story Recap",
+                tint = BundeHighlight,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = recap?.recapTitle ?: "Story So Far ($completedCount parts done)",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = BundeTextPrimary
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        if (recap == null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = BundeAccent,
+                    strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "Connecting the story so far...",
+                    fontSize = 13.sp,
+                    color = BundeTextSecondary
+                )
+            }
+        } else {
+            Text(
+                text = recap.storySoFar,
+                fontSize = 14.sp,
+                color = BundeTextPrimary,
+                lineHeight = 21.sp
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(BundeSuccessLight)
+                    .padding(10.dp)
+            ) {
+                Text(
+                    text = "💡 ${recap.quickTip}",
+                    fontSize = 12.sp,
+                    color = BundeTextPrimary,
+                    lineHeight = 18.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        BundePrimaryButton(
+            text = "Continue to Next Part →",
+            onClick = onContinueLesson
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        BundeOutlineButton(
+            text = "Save & Take a Short Break",
+            onClick = onTakeBreak
+        )
+    }
+}
+
+@Composable
+fun ExplanationSection(
+    step: StructuredConceptStep,
+    conceptIndex: Int,
+    selectedGuess: String? = null
+) {
     BundeCard(
         backgroundColor = BundeSurface,
         borderColor = BundeBorder
@@ -301,18 +529,46 @@ fun ExplanationSection(step: StructuredConceptStep, conceptIndex: Int) {
             Spacer(modifier = Modifier.width(10.dp))
             Column {
                 Text(
-                    text = step.learningObjective.uppercase(),
-                    fontSize = 10.sp,
+                    text = step.learningObjective,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    color = BundeAccent,
-                    letterSpacing = 0.5.sp
+                    color = BundeAccent
                 )
                 Text(
-                    text = "Core Concept",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = BundeTextPrimary
+                    text = "Part ${conceptIndex + 1}",
+                    fontSize = 11.sp,
+                    color = BundeTextSecondary
                 )
+            }
+        }
+
+        // Mini-story hook + student's prediction guess if they made one
+        if (!step.storyHook.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(BundeBackground)
+                    .border(1.dp, BundeBorder, RoundedCornerShape(8.dp))
+                    .padding(10.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = step.storyHook,
+                        fontSize = 13.sp,
+                        color = BundeTextPrimary,
+                        lineHeight = 19.sp
+                    )
+                    if (!selectedGuess.isNullOrBlank()) {
+                        Text(
+                            text = "Your guess: \"$selectedGuess\"",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = BundeHighlight
+                        )
+                    }
+                }
             }
         }
 
@@ -377,7 +633,7 @@ fun ExplanationSection(step: StructuredConceptStep, conceptIndex: Int) {
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Relatable Example",
+                        text = "Story Example",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = BundeHighlight
@@ -390,6 +646,44 @@ fun ExplanationSection(step: StructuredConceptStep, conceptIndex: Int) {
                     color = BundeTextPrimary,
                     lineHeight = 19.sp
                 )
+            }
+        }
+
+        // Memory Picture Anchor
+        if (!step.memoryPicture.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(BundeAccentLight.copy(alpha = 0.55f))
+                    .border(1.dp, BundeAccent.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
+                    .padding(12.dp)
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Outlined.Visibility,
+                            contentDescription = "Picture This",
+                            tint = BundeAccent,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Picture This (To Remember Easily)",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = BundeAccent
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = step.memoryPicture,
+                        fontSize = 13.sp,
+                        color = BundeTextPrimary,
+                        lineHeight = 19.sp
+                    )
+                }
             }
         }
     }

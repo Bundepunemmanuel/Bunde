@@ -38,7 +38,8 @@ interface GeminiService {
         previouslyTaughtConcepts: List<String>,
         uploadedNotesSummary: String? = null,
         struggleCount: Int = 0,
-        recentlyUsedActivityTypes: List<String> = emptyList()
+        recentlyUsedActivityTypes: List<String> = emptyList(),
+        previousStoryThread: String? = null
     ): GeminiResult<StructuredConceptStep>
 
     suspend fun evaluateStructuredAnswer(
@@ -65,6 +66,15 @@ interface GeminiService {
         currentConceptExplanation: String? = null,
         conversationHistory: List<Pair<String, String>> = emptyList()
     ): GeminiResult<TutorInterruptionResponse>
+
+    suspend fun generateSessionRecap(
+        apiKey: String,
+        subject: String,
+        topic: String,
+        classLevel: String,
+        completedConcepts: List<String>,
+        latestStoryThread: String? = null
+    ): GeminiResult<SessionRecap>
 }
 
 data class WordMeaning(
@@ -86,7 +96,18 @@ data class StructuredConceptStep(
     val conciseExplanation: String,
     val concreteExample: String,
     val activity: StructuredActivity,
-    val keyWordMeanings: List<WordMeaning> = emptyList()
+    val keyWordMeanings: List<WordMeaning> = emptyList(),
+    val storyHook: String? = null,
+    val predictionPrompt: String? = null,
+    val predictionOptions: List<String> = emptyList(),
+    val memoryPicture: String? = null,
+    val storyThreadSummary: String? = null
+)
+
+data class SessionRecap(
+    val recapTitle: String,
+    val storySoFar: String,
+    val quickTip: String
 )
 
 enum class EvaluationVerdict {

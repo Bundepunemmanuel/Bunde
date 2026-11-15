@@ -289,7 +289,8 @@ class GeminiServiceImpl : GeminiService {
         previouslyTaughtConcepts: List<String>,
         uploadedNotesSummary: String?,
         struggleCount: Int,
-        recentlyUsedActivityTypes: List<String>
+        recentlyUsedActivityTypes: List<String>,
+        previousStoryThread: String?
     ): GeminiResult<StructuredConceptStep> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
             return@withContext GeminiResult.Error("API key missing. Enter key in Settings.", isKeyMissing = true)
@@ -301,8 +302,14 @@ class GeminiServiceImpl : GeminiService {
             "Keep explanations clear, natural, and easy for a $classLevel student to grasp on the first read."
         }
 
+        val threadContext = if (previousStoryThread.isNullOrBlank()) {
+            "This is the opening episode—introduce a fresh, memorable real-life mini-story or character if helpful."
+        } else {
+            "Continue smoothly from the previous episode/thread so the topic feels like one connected story: $previousStoryThread"
+        }
+
         val prompt = """
-            Teach ONE small concept to a $classLevel student using the Explain-It-Simply method:
+            Teach ONE small concept to a $classLevel student so it sticks in memory like a movie scene:
             - Subject: $subject
             - Topic: $topic
             - Class Level: $classLevel
@@ -310,38 +317,44 @@ class GeminiServiceImpl : GeminiService {
             - Focus Area: $conceptCategory
             - Core Fact/Point to Teach: $conceptSummary
             - Already Taught Earlier: ${if (previouslyTaughtConcepts.isEmpty()) "Nothing yet (this is the first concept)" else previouslyTaughtConcepts.joinToString(", ")}
+            - Story Continuity: $threadContext
             - Student Notes Context: ${uploadedNotesSummary ?: "Standard school syllabus"}
             - Recently Used Question Types (try to pick a fresh one): ${recentlyUsedActivityTypes.joinToString(", ").ifEmpty { "None" }}
             - $adaptiveNote
 
-            HOW TO WRITE THIS LESSON STEP (FOLLOW EVERY RULE):
+            HOW TO MAKE THIS CONCEPT UNFORGETTABLE (FOLLOW EVERY RULE):
             1. ZERO GREETINGS OR FILLER: Start straight with the teaching. No "Hello", "Welcome", or "Today we will learn".
-            2. LEARNING OBJECTIVE ("learningObjective"): 1 short, plain-English line spoken directly TO the student (e.g. "Learn what privatization means", NOT "Define privatization for an SS2 student"; no ALL-CAPS).
-            3. SIMPLE EXPLANATION ("conciseExplanation"):
-               - Write 2 to 3 very short, friendly paragraphs (2 to 3 short sentences per paragraph).
-               - Paragraph 1: Explain what this concept means in plain everyday English. (If an exam definition is important, give the true meaning and immediately explain it in simple words.)
-               - Paragraph 2: Break down how it works, why it happens, or the exact order of events/steps.
-               - Explain any hard or exam word immediately right after using it (for example: "Pharaoh adopted Moses. Adopted means he took Moses as his own child and raised him.").
-               - Keep accurate facts, dates, names, and formulas. Do NOT dump multiple unrelated subtopics here.
-               - Adapt to $subject (step-by-step numbers for Math, clear how/why for Science, order of events for History/CRS, everyday buying/selling/money for Economics/Commerce).
-            4. MEANING OF KEY WORDS ("keyWordMeanings"):
-               - If you used 1 to 3 important exam words or hard words in the explanation, list each word and its simple 1-sentence meaning in everyday English.
-               - If there are no hard words needed, return an empty list [].
-            5. RELATABLE EXAMPLE ("concreteExample"):
-               - Give 1 clear, relatable everyday, school, family, community, or realistic example (or a clean step-by-step worked example for Math/Science).
-               - Use Nigerian examples where natural, without forcing them. Never let a comparison replace the real facts.
-            6. EASY-TO-UNDERSTAND QUESTION ("activity"):
+            2. LEARNING OBJECTIVE ("learningObjective"): 1 short, plain-English line spoken directly TO the student (e.g. "Learn why a company is treated like its own legal person", no ALL-CAPS).
+            3. MINI-STORY HOOK ("storyHook"):
+               - Write 1 to 2 vivid, curious sentences putting real people in a concrete situation BEFORE giving the textbook term.
+               - Example: "Chidi and Musa register a bread bakery together. One day, the bakery owes 300,000 Naira for flour—can the supplier take Musa's personal phone to pay the debt?"
+            4. GUESS FIRST ("predictionPrompt" & "predictionOptions"):
+               - If guessing before reading wakes up curiosity (great for concepts, decisions, causes, science predictions, or scenarios), write a short 1-sentence guess question and 2 or 3 very short guess choices (e.g. ["Yes, Musa must pay from his pocket", "No, only the company pays", "Only if Chidi agrees"]).
+               - If this step is a pure math formula or step-by-step calculation where guessing doesn't fit, set "predictionPrompt": null and "predictionOptions": [].
+            5. SIMPLE EXPLANATION ("conciseExplanation"):
+               - Write 2 to 3 very short, friendly paragraphs (2 to 3 short sentences per paragraph) that directly answer the hook and teach the exam point.
+               - Explain any hard or exam word immediately right after using it in everyday English.
+               - Keep accurate facts, dates, names, and formulas. Adapt naturally to $subject.
+            6. MEANING OF KEY WORDS ("keyWordMeanings"):
+               - List 0 to 3 important exam or hard words from this step with their simple 1-sentence meanings.
+            7. MOVIE-SCENE EXAMPLE ("concreteExample"):
+               - Write 1 vivid mini-scene with clear characters, action, and outcome (or a clear step-by-step worked example for Math/Science) that makes the idea easy to picture.
+            8. PICTURE THIS MEMORY ANCHOR ("memoryPicture"):
+               - Write 1 memorable, easy-to-picture mental image tying the term to the scene (e.g., "Picture a registered company like a separate invisible person holding its own wallet—separate from the owners' pockets.").
+            9. NEXT-EPISODE THREAD ("storyThreadSummary"):
+               - Write 1 short sentence summarizing the story or key idea so the next concept can pick up cleanly from here.
+            10. EASY-TO-UNDERSTAND CHECK QUESTION ("activity"):
                - Ask ONE clear, direct question in simple English that tests this exact concept.
                - NEVER ask generic questions like "What did you learn?", "Do you understand?", or "Explain this in your own words."
-               - Choose the best activity type for $subject:
-                 "SCENARIO", "ERROR_DETECTION", "PREDICTION", "STEP_SOLVE", "COMPARISON", "CAUSE_EFFECT", or "CALCULATION".
-               - Keep "hint" short, warm, and easy to understand.
-               - Leave "options" as [] unless a short 3-4 option multiple choice genuinely works better here.
+               - Choose from: "SCENARIO", "ERROR_DETECTION", "PREDICTION", "STEP_SOLVE", "COMPARISON", "CAUSE_EFFECT", or "CALCULATION".
 
             Return strictly a JSON object with this exact structure:
             {
               "conceptId": "$conceptId",
               "learningObjective": "Short plain-English goal for this step",
+              "storyHook": "1-2 sentence relatable mini-scene or curiosity dilemma.",
+              "predictionPrompt": "Short 1-sentence question asking the student to guess before reading (or null)",
+              "predictionOptions": ["Short guess A", "Short guess B"],
               "conciseExplanation": "2-3 short paragraphs in everyday English explaining one idea clearly.",
               "keyWordMeanings": [
                 {
@@ -349,7 +362,9 @@ class GeminiServiceImpl : GeminiService {
                   "meaning": "Simple everyday meaning of this word."
                 }
               ],
-              "concreteExample": "One clear, relatable example or step-by-step demonstration.",
+              "concreteExample": "One vivid, relatable mini-scene or step-by-step worked example.",
+              "memoryPicture": "One short mental picture so the student never forgets this concept.",
+              "storyThreadSummary": "One short sentence connecting this episode to the next concept.",
               "activity": {
                 "type": "SCENARIO",
                 "question": "One short, clear question testing this concept",
@@ -365,7 +380,7 @@ class GeminiServiceImpl : GeminiService {
             val jsonRoot = parseJsonWithRegeneration(
                 apiKey = apiKey,
                 rawResponse = responseText,
-                schemaHint = """{"conceptId": String, "learningObjective": String, "conciseExplanation": String, "keyWordMeanings": [{"word": String, "meaning": String}], "concreteExample": String, "activity": {"type": String, "question": String, "options": [String], "expectedAnswerCriteria": String, "hint": String}}"""
+                schemaHint = """{"conceptId": String, "learningObjective": String, "storyHook": String?, "predictionPrompt": String?, "predictionOptions": [String], "conciseExplanation": String, "keyWordMeanings": [{"word": String, "meaning": String}], "concreteExample": String, "memoryPicture": String?, "storyThreadSummary": String?, "activity": {"type": String, "question": String, "options": [String], "expectedAnswerCriteria": String, "hint": String}}"""
             )
             val actObj = jsonRoot.optJSONObject("activity") ?: JSONObject()
 
@@ -375,6 +390,15 @@ class GeminiServiceImpl : GeminiService {
                 for (i in 0 until optArr.length()) {
                     val optText = optArr.optString(i, "").trim()
                     if (optText.isNotBlank()) optionsList.add(optText)
+                }
+            }
+
+            val predOptionsList = mutableListOf<String>()
+            val predOptArr = jsonRoot.optJSONArray("predictionOptions")
+            if (predOptArr != null) {
+                for (i in 0 until predOptArr.length()) {
+                    val pOpt = predOptArr.optString(i, "").trim()
+                    if (pOpt.isNotBlank()) predOptionsList.add(pOpt)
                 }
             }
 
@@ -399,13 +423,23 @@ class GeminiServiceImpl : GeminiService {
                 hint = actObj.optString("hint", "").ifBlank { null }
             )
 
+            val rawHook = jsonRoot.optString("storyHook", "").trim()
+            val rawPredPrompt = jsonRoot.optString("predictionPrompt", "").trim()
+            val rawMemPic = jsonRoot.optString("memoryPicture", "").trim()
+            val rawThread = jsonRoot.optString("storyThreadSummary", "").trim()
+
             val step = StructuredConceptStep(
                 conceptId = jsonRoot.optString("conceptId", conceptId),
                 learningObjective = cleanHeading(jsonRoot.optString("learningObjective", "Understand $conceptTitle")),
                 conciseExplanation = jsonRoot.optString("conciseExplanation", conceptSummary),
                 concreteExample = jsonRoot.optString("concreteExample", "Think of how $conceptTitle shows up in everyday life around you."),
                 activity = activity,
-                keyWordMeanings = wordMeanings
+                keyWordMeanings = wordMeanings,
+                storyHook = if (rawHook.isBlank() || rawHook.equals("null", ignoreCase = true)) null else rawHook,
+                predictionPrompt = if (rawPredPrompt.isBlank() || rawPredPrompt.equals("null", ignoreCase = true) || predOptionsList.isEmpty()) null else rawPredPrompt,
+                predictionOptions = predOptionsList,
+                memoryPicture = if (rawMemPic.isBlank() || rawMemPic.equals("null", ignoreCase = true)) null else rawMemPic,
+                storyThreadSummary = if (rawThread.isBlank() || rawThread.equals("null", ignoreCase = true)) null else rawThread
             )
             GeminiResult.Success(step)
         } catch (e: Exception) {
@@ -423,7 +457,12 @@ class GeminiServiceImpl : GeminiService {
                         expectedAnswerCriteria = conceptSummary,
                         hint = "Think back to the main idea we just read above."
                     ),
-                    keyWordMeanings = emptyList()
+                    keyWordMeanings = emptyList(),
+                    storyHook = null,
+                    predictionPrompt = null,
+                    predictionOptions = emptyList(),
+                    memoryPicture = "Picture one real-life scene where ${cleanHeading(conceptTitle)} makes a clear difference.",
+                    storyThreadSummary = "We just covered ${cleanHeading(conceptTitle)}."
                 )
             )
         }
@@ -611,6 +650,59 @@ class GeminiServiceImpl : GeminiService {
                     bridgeBackToLesson = "When you feel ready, go ahead and try the question below."
                 )
             )
+        }
+    }
+
+    override suspend fun generateSessionRecap(
+        apiKey: String,
+        subject: String,
+        topic: String,
+        classLevel: String,
+        completedConcepts: List<String>,
+        latestStoryThread: String?
+    ): GeminiResult<SessionRecap> = withContext(Dispatchers.IO) {
+        val fallback = SessionRecap(
+            recapTitle = "Quick Brain Lock-In",
+            storySoFar = "You just finished ${completedConcepts.takeLast(3).joinToString(", ")}. ${latestStoryThread ?: "Take a quick breath so your brain saves what you just learned before we move on."}",
+            quickTip = "Resting for 1–2 minutes after a few concepts helps your brain lock them into long-term memory."
+        )
+        if (apiKey.isBlank()) {
+            return@withContext GeminiResult.Success(fallback)
+        }
+
+        val prompt = """
+            Give a 30-second "Story So Far" memory recap for a $classLevel student who just completed 3 concepts in $subject ($topic):
+            - Concepts Covered: ${completedConcepts.takeLast(3).joinToString(", ")}
+            - Latest Story Thread: ${latestStoryThread ?: "Connected lessons in $topic"}
+
+            RULES:
+            1. Write 2 to 3 short, friendly sentences in simple English connecting what they learned like a quick "Previously on..." movie recap.
+            2. Add 1 short memory tip reminding them why pausing or picturing the scene helps them remember for exams.
+
+            Return strictly JSON:
+            {
+              "recapTitle": "Short friendly title like 'Story So Far'",
+              "storySoFar": "2-3 short connected sentences summarizing the ideas covered.",
+              "quickTip": "1 short encouraging sentence about pausing to lock the ideas in."
+            }
+        """.trimIndent()
+
+        try {
+            val responseText = executeGeminiPrompt(apiKey, prompt, emptyList())
+            val jsonRoot = parseJsonWithRegeneration(
+                apiKey = apiKey,
+                rawResponse = responseText,
+                schemaHint = """{"recapTitle": String, "storySoFar": String, "quickTip": String}"""
+            )
+            GeminiResult.Success(
+                SessionRecap(
+                    recapTitle = cleanHeading(jsonRoot.optString("recapTitle", fallback.recapTitle)),
+                    storySoFar = jsonRoot.optString("storySoFar", fallback.storySoFar),
+                    quickTip = jsonRoot.optString("quickTip", fallback.quickTip)
+                )
+            )
+        } catch (_: Exception) {
+            GeminiResult.Success(fallback)
         }
     }
 

@@ -24,11 +24,13 @@ import kotlinx.coroutines.launch
 enum class LessonPhase {
     LOADING_TOPIC,
     EXPLANATION,          // Concise progressive concept explanation & real-world example
+    PREDICTION_HOOK,      // Mini-story hook + quick guess BEFORE reading the explanation
     ACTIVITY,             // Specific activity presentation (scenario, calculation, prediction, etc.)
     WAITING_FOR_ANSWER,   // Awaiting student's input (answer button active)
     EVALUATING_ANSWER,    // Gemini is evaluating the submission against the objective criteria
     FEEDBACK,             // Evaluated feedback displayed (verdict, praise, misconception analysis, hint)
     CONCEPT_COMPLETED,    // Objective demonstrated or attempt limit reached; explicit Continue enabled
+    SESSION_RECAP,        // 30-second "Story So Far" break card after every 3 concepts
     NEXT_CONCEPT,         // Transitioning to the next concept
     LESSON_COMPLETED,     // All concepts finished; celebration and persistence
     ERROR                 // Recoverable error state
@@ -51,8 +53,12 @@ data class TutorUiState(
     val currentActivity: StructuredActivity? = null,
     val evaluationResult: StructuredAnswerEvaluation? = null,
     val studentAnswerInput: String = "",
+    val selectedPredictionGuess: String? = null,
     val attemptNumber: Int = 1,
     val struggleCount: Int = 0,
+    val conceptsCompletedThisSession: Int = 0,
+    val previousStoryThread: String? = null,
+    val sessionRecap: com.bunde.learning.domain.ai.SessionRecap? = null,
     val previouslyTaughtConcepts: List<String> = emptyList(),
     val recentlyUsedActivityTypes: List<String> = emptyList(),
     val interruptions: List<TutorInterruptionItem> = emptyList(),
@@ -96,6 +102,10 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
                     previouslyTaughtConcepts = emptyList(),
                     recentlyUsedActivityTypes = emptyList(),
                     interruptions = emptyList(),
+                    selectedPredictionGuess = null,
+                    previousStoryThread = null,
+                    sessionRecap = null,
+                    conceptsCompletedThisSession = 0,
                     attemptNumber = 1,
                     struggleCount = 0
                 )
@@ -120,6 +130,7 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
                 currentSubtopic = concept,
                 evaluationResult = null,
                 studentAnswerInput = "",
+                selectedPredictionGuess = null,
                 attemptNumber = 1,
                 errorMessage = null
             )
@@ -146,15 +157,17 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
                 previouslyTaughtConcepts = _uiState.value.previouslyTaughtConcepts,
                 uploadedNotesSummary = notesContext,
                 struggleCount = _uiState.value.struggleCount,
-                recentlyUsedActivityTypes = _uiState.value.recentlyUsedActivityTypes
+                recentlyUsedActivityTypes = _uiState.value.recentlyUsedActivityTypes,
+                previousStoryThread = _uiState.value.previousStoryThread
             )
 
             when (result) {
                 is GeminiResult.Success -> {
                     val step = result.data
                     val updatedRecentTypes = (_uiState.value.recentlyUsedActivityTypes + step.activity.type).takeLast(4)
+                    val shouldPredictFirst = !step.predictionPrompt.isNullOrBlank() && step.predictionOptions.isNotEmpty()
                     _uiState.value = _uiState.value.copy(
-                        phase = LessonPhase.WAITING_FOR_ANSWER,
+                        phase = if (shouldPredictFirst) LessonPhase.PREDICTION_HOOK else LessonPhase.WAITING_FOR_ANSWER,
                         currentStep = step,
                         currentActivity = step.activity,
                         recentlyUsedActivityTypes = updatedRecentTypes
@@ -238,7 +251,7 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
                         struggleCount = if (!evaluation.conceptCompleted) state.struggleCount + 1 else state.struggleCount
                     )
 
-                    // Spaced Retrieval Integration: update memory queue based on demonstrated mastery
+                    // Spaced Retrieval Integration: update memory queue with story cue
                     if (evaluation.conceptCompleted) {
                         val revItem = RevisionItem(
                             id = "rev_${concept.id}",
@@ -247,6 +260,7 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
                             subtopicTitle = concept.title,
                             prompt = activity.question,
                             expectedAnswer = activity.expectedAnswerCriteria,
+                            memoryCue = step.memoryPicture ?: step.concreteExample,
                             intervalDays = if (evaluation.scoreOutOfTen >= 8) 3 else 1,
                             dueDate = System.currentTimeMillis() + (if (evaluation.scoreOutOfTen >= 8) 3 else 1) * 24 * 60 * 60 * 1000L,
                             isWeakArea = evaluation.scoreOutOfTen < 8
@@ -275,6 +289,30 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
         }
     }
 
+    fun submitPredictionGuess(guess: String) {
+        if (_uiState.value.phase != LessonPhase.PREDICTION_HOOK) return
+        _uiState.value = _uiState.value.copy(
+            selectedPredictionGuess = guess,
+            phase = LessonPhase.WAITING_FOR_ANSWER
+        )
+    }
+
+    fun skipPredictionToExplanation() {
+        if (_uiState.value.phase != LessonPhase.PREDICTION_HOOK) return
+        _uiState.value = _uiState.value.copy(
+            selectedPredictionGuess = null,
+            phase = LessonPhase.WAITING_FOR_ANSWER
+        )
+    }
+
+    fun continueFromRecap() {
+        val state = _uiState.value
+        val map = state.topicMap ?: return
+        val nextConcept = state.currentSubtopic ?: return
+        _uiState.value = state.copy(sessionRecap = null)
+        startConcept(nextConcept, state.currentConceptIndex, map)
+    }
+
     /**
      * Explicit advance to the next concept. Called ONLY when the student taps the Continue button.
      * Prevents Gemini or loose text from arbitrarily skipping or remaining on a concept.
@@ -289,16 +327,24 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
         val updatedPreviouslyTaught = if (currentTitle != null) {
             state.previouslyTaughtConcepts + currentTitle
         } else state.previouslyTaughtConcepts
+        val updatedStoryThread = state.currentStep?.storyThreadSummary ?: state.previousStoryThread
+        val completedInSession = state.conceptsCompletedThisSession + 1
 
         if (nextIndex < map.subtopics.size) {
             val nextConcept = map.subtopics[nextIndex]
+            val shouldShowRecapBreak = completedInSession % 3 == 0
+
             _uiState.value = state.copy(
-                phase = LessonPhase.NEXT_CONCEPT,
+                phase = if (shouldShowRecapBreak) LessonPhase.SESSION_RECAP else LessonPhase.NEXT_CONCEPT,
                 currentConceptIndex = nextIndex,
                 currentSubtopic = nextConcept,
                 previouslyTaughtConcepts = updatedPreviouslyTaught,
+                previousStoryThread = updatedStoryThread,
+                conceptsCompletedThisSession = completedInSession,
+                sessionRecap = null,
                 evaluationResult = null,
                 studentAnswerInput = "",
+                selectedPredictionGuess = null,
                 attemptNumber = 1,
                 struggleCount = 0
             )
@@ -321,12 +367,30 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
                 storage.saveTopic(updatedTopic)
             }
 
-            startConcept(nextConcept, nextIndex, map)
+            if (shouldShowRecapBreak) {
+                viewModelScope.launch {
+                    val recapRes = gemini.generateSessionRecap(
+                        apiKey = apiKey,
+                        subject = map.subject,
+                        topic = map.topicName,
+                        classLevel = map.classLevel,
+                        completedConcepts = updatedPreviouslyTaught,
+                        latestStoryThread = updatedStoryThread
+                    )
+                    if (recapRes is GeminiResult.Success) {
+                        _uiState.value = _uiState.value.copy(sessionRecap = recapRes.data)
+                    }
+                }
+            } else {
+                startConcept(nextConcept, nextIndex, map)
+            }
         } else {
             // All concepts completed!
             _uiState.value = state.copy(
                 phase = LessonPhase.LESSON_COMPLETED,
-                previouslyTaughtConcepts = updatedPreviouslyTaught
+                previouslyTaughtConcepts = updatedPreviouslyTaught,
+                previousStoryThread = updatedStoryThread,
+                conceptsCompletedThisSession = completedInSession
             )
 
             viewModelScope.launch {
