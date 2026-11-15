@@ -61,9 +61,16 @@ interface GeminiService {
         classLevel: String,
         currentConceptTitle: String,
         currentActivityQuestion: String,
-        studentQuery: String
+        studentQuery: String,
+        currentConceptExplanation: String? = null,
+        conversationHistory: List<Pair<String, String>> = emptyList()
     ): GeminiResult<TutorInterruptionResponse>
 }
+
+data class WordMeaning(
+    val word: String,
+    val meaning: String
+)
 
 data class StructuredActivity(
     val type: String, // e.g. "SCENARIO", "ERROR_DETECTION", "PREDICTION", "STEP_SOLVE", "COMPARISON", "CALCULATION", "CAUSE_EFFECT", "REASONING"
@@ -78,7 +85,8 @@ data class StructuredConceptStep(
     val learningObjective: String,
     val conciseExplanation: String,
     val concreteExample: String,
-    val activity: StructuredActivity
+    val activity: StructuredActivity,
+    val keyWordMeanings: List<WordMeaning> = emptyList()
 )
 
 enum class EvaluationVerdict {

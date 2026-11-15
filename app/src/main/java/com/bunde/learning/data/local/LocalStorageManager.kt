@@ -118,8 +118,8 @@ class LocalStorageManager(private val context: Context) {
                 topicId = "topic_privatization",
                 topicTitle = "Privatization",
                 subtopicTitle = "Reasons for Privatization",
-                prompt = "What is the primary economic reason governments sell state-owned enterprises?",
-                expectedAnswer = "To reduce fiscal deficit and promote operational efficiency.",
+                prompt = "Why do governments sometimes sell public companies to private owners?",
+                expectedAnswer = "To reduce government debt and help the company run better and faster.",
                 intervalDays = 3,
                 dueDate = System.currentTimeMillis() + 1000 * 60 * 60 * 2,
                 isWeakArea = true

@@ -35,12 +35,65 @@ class GeminiServiceImpl : GeminiService {
         "gemini-2.5-flash"
     )
 
+    companion object {
+        private val GLOBAL_TUTOR_SYSTEM_INSTRUCTION = """
+            You are Bunde, a patient, warm, intelligent secondary school teacher sitting right beside a student.
+            Your primary target is an SS2 secondary school student (unless another class level is specified).
+
+            PERMANENT TEACHING & LANGUAGE RULES:
+            1. SIMPLE ENGLISH IS MANDATORY:
+               - Use common, everyday words and short, natural sentences.
+               - Write short paragraphs (1 to 3 short sentences each). Explain one small idea at a time.
+               - NEVER write like a university lecturer, academic researcher, formal textbook author, or generic AI chatbot.
+               - Avoid unnecessary big words, stiff phrases (like "thereby", "pivotal", "operational efficiency", "implications"), and long complex sentences.
+               - Avoid repeating the same idea just to sound detailed.
+               - ZERO filler: never open with "Welcome back", "Hello!", or "Good day", and never end with "Let me know if you want to learn more" or "Do you understand?".
+
+            2. EXPLAIN DIFFICULT WORDS IMMEDIATELY:
+               - Keep important subject and examination terms so the student learns what they need for exams.
+               - Whenever you use a hard or unfamiliar word, explain it right away in plain everyday English.
+               - Example: "Pharaoh adopted Moses. Adopted means he accepted Moses as his own child and raised him."
+               - Never pack several difficult words into one sentence without explaining them.
+
+            3. PLAIN, CLEAR HEADINGS & QUESTIONS:
+               - Concept titles, headings, instructions, examples, and questions must be easy to read on the first try.
+               - Bad heading: "ANALYZE THE DIVINE PRESERVATION OF INFANT MOSES AND HIS FLIGHT TO MIDIAN."
+               - Good heading: "How Moses Was Saved and Grew Up in the Palace"
+               - Bad question: "Analyze the implications of Moses' decision in the context of his conflicting cultural identities."
+               - Good question: "Why did Moses decide to help the Hebrew man?"
+
+            4. PRESERVE ACADEMIC ACCURACY:
+               - Simple English must never mean wrong or incomplete facts.
+               - Teach accurate definitions, dates, names, events, formulas, and calculation steps.
+               - When an exam definition matters, give the accurate point and then explain it in everyday English.
+               - Distinguish facts from opinions. Follow uploaded student notes faithfully when notes are provided.
+               - Never confuse the topic name with the student's name, and never invent personal details about the student.
+
+            5. RELATABLE EXAMPLES & SUBJECT ADAPTATION:
+               - Use clear everyday, school, family, community, or realistic examples (including Nigerian examples where natural, without forcing them into every lesson).
+               - Examples must clarify the topic, never replace real facts.
+               - Adapt naturally to each subject:
+                 * Mathematics: show calculations step by step.
+                 * Science: explain clearly how and why things happen.
+                 * History & CRS: tell events in the order they happened, one event at a time.
+                 * Economics & Commerce: use familiar buying, selling, saving, and business examples.
+                 * English Language: explain grammar and words with short, clear examples.
+
+            6. ADAPTIVE LANGUAGE DIFFICULTY:
+               - If a student is confused or asks what a word means, explain even more simply using a fresh everyday example. Never repeat the same complicated explanation.
+
+            FINAL SELF-CHECK BEFORE ANSWERING:
+            Ask yourself: "Would an SS2 student understand this clearly the very first time they read it?"
+            If not, make the words simpler and the sentences shorter before replying.
+        """.trimIndent()
+    }
+
     override suspend fun testConnection(apiKey: String): GeminiResult<Boolean> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
             return@withContext GeminiResult.Error("API Key is missing. Please enter your Gemini API key in Settings.", isKeyMissing = true)
         }
         try {
-            executeGeminiPrompt(apiKey, "Reply with 'OK'", emptyList())
+            executeGeminiPrompt(apiKey, "Reply with 'OK'", emptyList(), expectJson = false)
             GeminiResult.Success(true)
         } catch (e: IOException) {
             GeminiResult.Error("Network failure: check your internet connection.", isNetworkIssue = true)
@@ -60,31 +113,35 @@ class GeminiServiceImpl : GeminiService {
         }
 
         val prompt = """
-            You are Bunde, an expert educational AI personal tutor.
-            Generate an exhaustive, logically sequenced curriculum topic map for:
-            Subject: $subject
-            Topic: $topic
-            Class / Educational Level: $classLevel
+            Create a clear, step-by-step lesson plan (topic map) for a $classLevel student:
+            - Subject: $subject
+            - Topic: $topic
+            - Class Level: $classLevel
 
-            Pedagogical Hierarchy Requirements:
-            1. Break the topic into logically ordered, progressive learning subtopics (Concepts) from foundational to advanced.
-            2. Fully represent the relevant educational dimensions: Definitions, Features, Characteristics, Types/Classifications, Objectives, Reasons/Causes, Effects/Consequences, Functions, Importance, Advantages/Disadvantages, Challenges, Processes/Stages, Applications, Calculations/Formulas (for quantitative subjects), or Textual/Scriptural context (for humanities/languages/religious studies).
-            3. ONLY include subtopics that genuinely apply to this subject and topic. Never force artificial categories.
-            4. Do not confuse the topic name with any person's name.
-            5. Provide 4 to 8 clear, distinct subtopics that cover the complete curriculum unit for this class level.
+            RULES FOR THIS TOPIC MAP:
+            1. Break the topic into 4 to 8 small, easy-to-follow subtopics in logical teaching order (from basic idea to deeper parts).
+            2. Teach ONE small part per subtopic. For example, in History/CRS, put birth/saving, growing up, and later events as separate subtopics—never lump everything into one big heading.
+            3. Use simple, friendly headings in Title Case (like "What Privatization Means" or "How Moses Was Saved and Grew Up in the Palace"). NEVER use ALL-CAPS or research-paper titles.
+            4. Keep "summary" to 2 short, clear sentences telling the student what this topic is about in everyday English.
+            5. Keep each subtopic's "shortSummary" to 1 plain-English sentence explaining the main fact or exam point.
+            6. Include only subtopics that genuinely belong to $subject and $topic.
+            7. Never confuse the topic name "$topic" with the student's name.
+
+            Allowed "category" values:
+            DEFINITION, FEATURE, CHARACTERISTIC, TYPE, OBJECTIVE, REASON, CAUSE, EFFECT, FUNCTION, IMPORTANCE, ADVANTAGE, DISADVANTAGE, CHALLENGE, PROCESS, STAGE, EXAMPLE, APPLICATION, FORMULA, COMPARISON, GENERAL
 
             Return strictly a JSON object with this exact structure:
             {
               "topicName": "$topic",
               "subject": "$subject",
               "classLevel": "$classLevel",
-              "summary": "Clear, engaging 2-sentence summary of what this curriculum unit accomplishes.",
+              "summary": "2 short, clear sentences in everyday English about what the student will learn.",
               "subtopics": [
                 {
                   "id": "sub_1",
-                  "title": "Subtopic Title",
+                  "title": "Simple, Clear Subtopic Heading",
                   "category": "DEFINITION",
-                  "shortSummary": "Specific core concept covered here.",
+                  "shortSummary": "One plain-English sentence covering the main idea and key fact.",
                   "orderIndex": 0
                 }
               ]
@@ -93,8 +150,11 @@ class GeminiServiceImpl : GeminiService {
 
         try {
             val responseText = executeGeminiPrompt(apiKey, prompt, emptyList())
-            val jsonClean = extractJsonString(responseText)
-            val jsonRoot = JSONObject(jsonClean)
+            val jsonRoot = parseJsonWithRegeneration(
+                apiKey = apiKey,
+                rawResponse = responseText,
+                schemaHint = """{"topicName": String, "subject": String, "classLevel": String, "summary": String, "subtopics": [{"id": String, "title": String, "category": String, "shortSummary": String, "orderIndex": Int}]}"""
+            )
 
             val subtopicsList = mutableListOf<SubtopicNode>()
             val subArray = jsonRoot.optJSONArray("subtopics") ?: JSONArray()
@@ -105,7 +165,7 @@ class GeminiServiceImpl : GeminiService {
                 subtopicsList.add(
                     SubtopicNode(
                         id = item.optString("id", "sub_${i + 1}"),
-                        title = item.optString("title", "Concept ${i + 1}"),
+                        title = cleanHeading(item.optString("title", "Part ${i + 1}")),
                         category = category,
                         shortSummary = item.optString("shortSummary", ""),
                         isFromUploadedNotes = false,
@@ -119,12 +179,12 @@ class GeminiServiceImpl : GeminiService {
                 topicName = jsonRoot.optString("topicName", topic),
                 subject = jsonRoot.optString("subject", subject),
                 classLevel = jsonRoot.optString("classLevel", classLevel),
-                summary = jsonRoot.optString("summary", "Structured curriculum map generated by Gemini."),
+                summary = jsonRoot.optString("summary", "A clear, step-by-step guide to $topic in $subject."),
                 subtopics = subtopicsList
             )
             GeminiResult.Success(topicMap)
         } catch (e: Exception) {
-            GeminiResult.Error("Failed to generate topic map: ${e.localizedMessage}")
+            GeminiResult.Error("Could not build the lesson plan right now: ${e.localizedMessage}")
         }
     }
 
@@ -141,25 +201,31 @@ class GeminiServiceImpl : GeminiService {
         }
 
         val prompt = """
-            You are Bunde, an expert educational AI tutor.
-            Analyze the provided student school note images carefully.
-            Extract the subject, main topic, educational level (e.g. SS2, Grade 11), headings, subtopics, definitions, and key concepts.
-            If any text in the note images is unreadable or blurry, explicitly note it in the unreadableNoteNotice instead of inventing facts.
-            Subject hint provided by student: ${userSubject ?: "General"}
+            Read the student's uploaded school note images carefully.
+            Subject hint from student: ${userSubject ?: "Not specified"}
+
+            RULES FOR ANALYZING UPLOADED NOTES:
+            1. Follow the facts, definitions, formulas, dates, and points written in the student's notes faithfully. Do NOT invent missing facts.
+            2. If any writing in the photos is blurry or hard to read, say so plainly in "unreadableNoteNotice" instead of guessing.
+            3. Turn the note sections into small, clear subtopics with easy-to-understand Title Case headings (never ALL-CAPS or academic jargon).
+            4. Explain the "summary" and each subtopic's "shortSummary" in simple, everyday English suitable for an SS2 student while keeping all key exam facts from the notes.
+
+            Allowed "category" values:
+            DEFINITION, FEATURE, CHARACTERISTIC, TYPE, OBJECTIVE, REASON, CAUSE, EFFECT, FUNCTION, IMPORTANCE, ADVANTAGE, DISADVANTAGE, CHALLENGE, PROCESS, STAGE, EXAMPLE, APPLICATION, FORMULA, COMPARISON, GENERAL
 
             Return strictly a JSON object with this exact structure:
             {
-              "topicName": "Extracted Main Topic Name",
+              "topicName": "Clear Main Topic Name from Notes",
               "subject": "Extracted Subject",
               "classLevel": "SS2",
-              "summary": "Clear summary of the uploaded notes content.",
+              "summary": "2 short, simple sentences summarizing what these notes cover.",
               "unreadableNoteNotice": null,
               "subtopics": [
                 {
                   "id": "sub_1",
-                  "title": "Extracted Heading / Subtopic",
+                  "title": "Simple Heading from Notes",
                   "category": "DEFINITION",
-                  "shortSummary": "Explanation extracted from notes",
+                  "shortSummary": "Simple explanation of the exact fact or point in the notes.",
                   "orderIndex": 0
                 }
               ]
@@ -168,8 +234,11 @@ class GeminiServiceImpl : GeminiService {
 
         try {
             val responseText = executeGeminiPrompt(apiKey, prompt, imageBytesList)
-            val jsonClean = extractJsonString(responseText)
-            val jsonRoot = JSONObject(jsonClean)
+            val jsonRoot = parseJsonWithRegeneration(
+                apiKey = apiKey,
+                rawResponse = responseText,
+                schemaHint = """{"topicName": String, "subject": String, "classLevel": String, "summary": String, "unreadableNoteNotice": String?, "subtopics": [{"id": String, "title": String, "category": String, "shortSummary": String, "orderIndex": Int}]}"""
+            )
 
             val subtopicsList = mutableListOf<SubtopicNode>()
             val subArray = jsonRoot.optJSONArray("subtopics") ?: JSONArray()
@@ -180,7 +249,7 @@ class GeminiServiceImpl : GeminiService {
                 subtopicsList.add(
                     SubtopicNode(
                         id = item.optString("id", "sub_${i + 1}"),
-                        title = item.optString("title", "Note Concept ${i + 1}"),
+                        title = cleanHeading(item.optString("title", "Note Part ${i + 1}")),
                         category = category,
                         shortSummary = item.optString("shortSummary", ""),
                         isFromUploadedNotes = true,
@@ -189,19 +258,20 @@ class GeminiServiceImpl : GeminiService {
                 )
             }
 
-            val notice = jsonRoot.optString("unreadableNoteNotice", "").ifBlank { null }
+            val rawNotice = jsonRoot.optString("unreadableNoteNotice", "").trim()
+            val notice = if (rawNotice.isBlank() || rawNotice.equals("null", ignoreCase = true)) null else rawNotice
             val topicMap = TopicMap(
                 topicId = "notes_topic_${System.currentTimeMillis()}",
                 topicName = jsonRoot.optString("topicName", "Scanned Notes Topic"),
                 subject = jsonRoot.optString("subject", userSubject ?: "General Studies"),
                 classLevel = jsonRoot.optString("classLevel", "SS2"),
-                summary = jsonRoot.optString("summary", "Analysis extracted from student notes."),
+                summary = jsonRoot.optString("summary", "Key points taken from your uploaded class notes."),
                 subtopics = subtopicsList,
                 unreadableNoteNotice = notice
             )
             GeminiResult.Success(topicMap)
         } catch (e: Exception) {
-            GeminiResult.Error("Failed to analyze notes: ${e.localizedMessage}")
+            GeminiResult.Error("Could not read your notes clearly right now: ${e.localizedMessage}")
         }
     }
 
@@ -225,70 +295,105 @@ class GeminiServiceImpl : GeminiService {
             return@withContext GeminiResult.Error("API key missing. Enter key in Settings.", isKeyMissing = true)
         }
 
+        val adaptiveNote = if (struggleCount > 0) {
+            "ADAPTIVE ALERT: The student found earlier parts tricky (struggle count: $struggleCount). Use EVEN SIMPLER everyday words, shorter sentences, and break this idea down gently step by step."
+        } else {
+            "Keep explanations clear, natural, and easy for a $classLevel student to grasp on the first read."
+        }
+
         val prompt = """
-            You are Bunde, an active personal AI tutor.
-            Generate a targeted, high-impact learning step for:
+            Teach ONE small concept to a $classLevel student using the Explain-It-Simply method:
             - Subject: $subject
             - Topic: $topic
-            - Educational Level: $classLevel
-            - Concept ID: $conceptId
-            - Concept Title: $conceptTitle
-            - Concept Category: $conceptCategory
-            - Summary/Core Objective: $conceptSummary
-            - Step Progress: Concept ${conceptIndex + 1} of $totalConcepts
-            - Previously Taught Concepts: ${if (previouslyTaughtConcepts.isEmpty()) "None (opening concept)" else previouslyTaughtConcepts.joinToString(", ")}
-            - Uploaded Notes Context: ${uploadedNotesSummary ?: "Standard school syllabus"}
-            - Student Struggle Level: $struggleCount
-            - Recently Used Activity Types (AVOID repeating these unless essential): ${recentlyUsedActivityTypes.joinToString(", ").ifEmpty { "None" }}
+            - Class Level: $classLevel
+            - Concept (${conceptIndex + 1} of $totalConcepts): $conceptTitle
+            - Focus Area: $conceptCategory
+            - Core Fact/Point to Teach: $conceptSummary
+            - Already Taught Earlier: ${if (previouslyTaughtConcepts.isEmpty()) "Nothing yet (this is the first concept)" else previouslyTaughtConcepts.joinToString(", ")}
+            - Student Notes Context: ${uploadedNotesSummary ?: "Standard school syllabus"}
+            - Recently Used Question Types (try to pick a fresh one): ${recentlyUsedActivityTypes.joinToString(", ").ifEmpty { "None" }}
+            - $adaptiveNote
 
-            PEDAGOGICAL REQUIREMENTS (CRITICAL):
-            1. ZERO PREAMBLE: Start directly with the core explanation. No "Welcome back", "Hello", "Good morning", or greeting.
-            2. CONCISE EXPLANATION: Write ONLY 2 to 3 focused paragraphs explaining this single concept clearly for a $classLevel student. Explain any tricky terminology simply.
-            3. CONCRETE EXAMPLE: Provide 1 vivid, authentic real-world example, calculation demonstration, or practical scenario.
-            4. DESTROY GENERIC QUESTIONS: DO NOT ask "What did you learn?", "Can you explain this in your own words?", "Do you understand?", or "Give an example".
-            5. SPECIFIC ACTIVITY: The activity MUST test a concrete piece of the concept just explained.
-               Choose the best type for this subject/concept:
-               - "SCENARIO": Present a situation; student decides or explains the right outcome.
-               - "ERROR_DETECTION": Present a flawed statement/step; student spots the error.
-               - "PREDICTION": Student predicts what happens if a factor changes.
-               - "STEP_SOLVE": Student solves the next mathematical/chemical/economic step.
-               - "COMPARISON": Student distinguishes two closely related elements.
-               - "CAUSE_EFFECT": Student explains the mechanism behind an effect.
-               - "CALCULATION": Student calculates a value using the demonstrated formula.
+            HOW TO WRITE THIS LESSON STEP (FOLLOW EVERY RULE):
+            1. ZERO GREETINGS OR FILLER: Start straight with the teaching. No "Hello", "Welcome", or "Today we will learn".
+            2. LEARNING OBJECTIVE ("learningObjective"): 1 short, plain-English line spoken directly TO the student (e.g. "Learn what privatization means", NOT "Define privatization for an SS2 student"; no ALL-CAPS).
+            3. SIMPLE EXPLANATION ("conciseExplanation"):
+               - Write 2 to 3 very short, friendly paragraphs (2 to 3 short sentences per paragraph).
+               - Paragraph 1: Explain what this concept means in plain everyday English. (If an exam definition is important, give the true meaning and immediately explain it in simple words.)
+               - Paragraph 2: Break down how it works, why it happens, or the exact order of events/steps.
+               - Explain any hard or exam word immediately right after using it (for example: "Pharaoh adopted Moses. Adopted means he took Moses as his own child and raised him.").
+               - Keep accurate facts, dates, names, and formulas. Do NOT dump multiple unrelated subtopics here.
+               - Adapt to $subject (step-by-step numbers for Math, clear how/why for Science, order of events for History/CRS, everyday buying/selling/money for Economics/Commerce).
+            4. MEANING OF KEY WORDS ("keyWordMeanings"):
+               - If you used 1 to 3 important exam words or hard words in the explanation, list each word and its simple 1-sentence meaning in everyday English.
+               - If there are no hard words needed, return an empty list [].
+            5. RELATABLE EXAMPLE ("concreteExample"):
+               - Give 1 clear, relatable everyday, school, family, community, or realistic example (or a clean step-by-step worked example for Math/Science).
+               - Use Nigerian examples where natural, without forcing them. Never let a comparison replace the real facts.
+            6. EASY-TO-UNDERSTAND QUESTION ("activity"):
+               - Ask ONE clear, direct question in simple English that tests this exact concept.
+               - NEVER ask generic questions like "What did you learn?", "Do you understand?", or "Explain this in your own words."
+               - Choose the best activity type for $subject:
+                 "SCENARIO", "ERROR_DETECTION", "PREDICTION", "STEP_SOLVE", "COMPARISON", "CAUSE_EFFECT", or "CALCULATION".
+               - Keep "hint" short, warm, and easy to understand.
+               - Leave "options" as [] unless a short 3-4 option multiple choice genuinely works better here.
 
             Return strictly a JSON object with this exact structure:
             {
               "conceptId": "$conceptId",
-              "learningObjective": "Clear 1-sentence learning objective being tested",
-              "conciseExplanation": "The 2-3 paragraph explanation without greetings",
-              "concreteExample": "The practical example or demonstration",
+              "learningObjective": "Short plain-English goal for this step",
+              "conciseExplanation": "2-3 short paragraphs in everyday English explaining one idea clearly.",
+              "keyWordMeanings": [
+                {
+                  "word": "Important Term",
+                  "meaning": "Simple everyday meaning of this word."
+                }
+              ],
+              "concreteExample": "One clear, relatable example or step-by-step demonstration.",
               "activity": {
                 "type": "SCENARIO",
-                "question": "The specific challenge testing this exact concept",
+                "question": "One short, clear question testing this concept",
                 "options": [],
-                "expectedAnswerCriteria": "Key reasoning or facts required for an answer to be correct in the student's own words",
-                "hint": "A guiding hint if the student gets stuck"
+                "expectedAnswerCriteria": "Simple summary of the key idea the student should give",
+                "hint": "A gentle, plain-English clue if the student gets stuck"
               }
             }
         """.trimIndent()
 
         try {
             val responseText = executeGeminiPrompt(apiKey, prompt, emptyList())
-            val jsonClean = extractJsonString(responseText)
-            val jsonRoot = JSONObject(jsonClean)
+            val jsonRoot = parseJsonWithRegeneration(
+                apiKey = apiKey,
+                rawResponse = responseText,
+                schemaHint = """{"conceptId": String, "learningObjective": String, "conciseExplanation": String, "keyWordMeanings": [{"word": String, "meaning": String}], "concreteExample": String, "activity": {"type": String, "question": String, "options": [String], "expectedAnswerCriteria": String, "hint": String}}"""
+            )
             val actObj = jsonRoot.optJSONObject("activity") ?: JSONObject()
 
             val optionsList = mutableListOf<String>()
             val optArr = actObj.optJSONArray("options")
             if (optArr != null) {
                 for (i in 0 until optArr.length()) {
-                    optionsList.add(optArr.getString(i))
+                    val optText = optArr.optString(i, "").trim()
+                    if (optText.isNotBlank()) optionsList.add(optText)
+                }
+            }
+
+            val wordMeanings = mutableListOf<WordMeaning>()
+            val wordsArr = jsonRoot.optJSONArray("keyWordMeanings")
+            if (wordsArr != null) {
+                for (i in 0 until wordsArr.length()) {
+                    val wObj = wordsArr.optJSONObject(i) ?: continue
+                    val word = wObj.optString("word", "").trim()
+                    val meaning = wObj.optString("meaning", "").trim()
+                    if (word.isNotBlank() && meaning.isNotBlank()) {
+                        wordMeanings.add(WordMeaning(word = word, meaning = meaning))
+                    }
                 }
             }
 
             val activity = StructuredActivity(
                 type = actObj.optString("type", "SCENARIO"),
-                question = actObj.optString("question", "How does $conceptTitle apply in a practical situation?"),
+                question = actObj.optString("question", "How would you use $conceptTitle in a real situation?"),
                 options = optionsList,
                 expectedAnswerCriteria = actObj.optString("expectedAnswerCriteria", conceptSummary),
                 hint = actObj.optString("hint", "").ifBlank { null }
@@ -296,26 +401,29 @@ class GeminiServiceImpl : GeminiService {
 
             val step = StructuredConceptStep(
                 conceptId = jsonRoot.optString("conceptId", conceptId),
-                learningObjective = jsonRoot.optString("learningObjective", "Master $conceptTitle"),
+                learningObjective = cleanHeading(jsonRoot.optString("learningObjective", "Understand $conceptTitle")),
                 conciseExplanation = jsonRoot.optString("conciseExplanation", conceptSummary),
-                concreteExample = jsonRoot.optString("concreteExample", "In daily practice, $conceptTitle operates directly within $subject."),
-                activity = activity
+                concreteExample = jsonRoot.optString("concreteExample", "Think of how $conceptTitle shows up in everyday life around you."),
+                activity = activity,
+                keyWordMeanings = wordMeanings
             )
             GeminiResult.Success(step)
         } catch (e: Exception) {
+            // Simple-English local recovery if network or API fails
             GeminiResult.Success(
                 StructuredConceptStep(
                     conceptId = conceptId,
-                    learningObjective = "Understand $conceptTitle in $subject",
-                    conciseExplanation = "$conceptTitle is an essential concept in $topic. Specifically, $conceptSummary.",
-                    concreteExample = "For example, in $subject, this concept is applied to analyze and solve problems directly.",
+                    learningObjective = "Understand ${cleanHeading(conceptTitle)}",
+                    conciseExplanation = "Let's look at ${cleanHeading(conceptTitle)} in $topic.\n\nIn simple words: $conceptSummary",
+                    concreteExample = "Think about a real-life situation at school or at home where $conceptTitle plays a part. That everyday link helps you remember the main point for your exam.",
                     activity = StructuredActivity(
                         type = "SCENARIO",
-                        question = "Consider a situation in $topic where $conceptTitle is applied. What is the primary outcome?",
+                        question = "In your own words, why does ${cleanHeading(conceptTitle)} matter in $topic?",
                         options = emptyList(),
                         expectedAnswerCriteria = conceptSummary,
-                        hint = "Think about the key role $conceptTitle plays."
-                    )
+                        hint = "Think back to the main idea we just read above."
+                    ),
+                    keyWordMeanings = emptyList()
                 )
             )
         }
@@ -338,34 +446,37 @@ class GeminiServiceImpl : GeminiService {
         }
 
         val prompt = """
-            You are Bunde, an expert educational AI evaluating a $classLevel secondary school student's answer.
-            Evaluation Context:
+            Check a $classLevel student's answer like a warm, patient secondary school teacher.
+            Context:
             - Subject: $subject
             - Topic: $topic
             - Concept: $conceptTitle
-            - Learning Objective: $learningObjective
+            - Goal: $learningObjective
             - Question Asked: $activityQuestion
-            - Expected Answer Criteria: $expectedAnswerCriteria
-            - Student Answer: "$studentAnswer"
+            - Key Idea Expected: $expectedAnswerCriteria
+            - Student's Answer: "$studentAnswer"
             - Attempt Number: $attemptNumber
 
-            EVALUATION RULES:
-            1. Students can answer in their OWN WORDS. Do NOT demand verbatim textbook phrases.
-            2. Accept valid alternative reasoning or creative explanations that demonstrate true understanding.
-            3. Verdict choices:
-               - "CORRECT": Substantially demonstrates the objective. Score: 8-10. conceptCompleted = true, allowsRetry = false.
-               - "PARTIALLY_CORRECT": Got some aspects right, but missed an essential concept. Score: 5-7. conceptCompleted = false, allowsRetry = true. Provide a targetedHint.
-               - "INCORRECT": Revealed a clear misconception or wrong reasoning. Score: 1-4. conceptCompleted = false, allowsRetry = true. Explain the mistake gently and provide a hint.
-               - "NEEDS_CLARIFICATION": Answer is too vague, ambiguous, or one word. Ask the student to elaborate. Score: 4. conceptCompleted = false, allowsRetry = true.
+            HOW TO RESPOND (SIMPLE ENGLISH + ADAPTIVE TEACHING):
+            1. Write ALL feedback ("specificPraise", "explanationOfMistake", "targetedHint") in short, natural everyday English. Never sound like a textbook.
+            2. Let the student answer in their OWN simple words. Never demand textbook wording.
+            3. Handle what the student actually wrote:
+               - If the answer is right or shows clear understanding -> "CORRECT" (score 8-10, conceptCompleted = true, allowsRetry = false, explanationOfMistake = null, targetedHint = null). Say clearly what they got right in "specificPraise".
+               - If the student says "I don't understand", asks what a word means, or writes something too short/unclear -> "NEEDS_CLARIFICATION" (score 4, conceptCompleted = false, allowsRetry = true). Explain the confusing idea or word in MUCH simpler everyday words inside "explanationOfMistake", and give a very easy clue in "targetedHint".
+               - If the answer got part of it right but missed an important point -> "PARTIALLY_CORRECT" (score 5-7, conceptCompleted = false, allowsRetry = true). Praise what they got right, explain what is missing in 1-2 short simple sentences, and give a helpful "targetedHint".
+               - If the answer is wrong -> "INCORRECT" (score 1-4, conceptCompleted = false, allowsRetry = true). Gently explain the mix-up in simple English and give an easy clue in "targetedHint".
             4. If attemptNumber >= 2 and the student is still struggling:
-               - conceptCompleted = true, allowsRetry = false.
-               - Provide a clear, supportive resolution so the student is never stuck on a concept.
+               - Set conceptCompleted = true, allowsRetry = false.
+               - Give the clear, simple explanation of the right answer in "explanationOfMistake" so the student understands before moving on.
 
-            Return strictly a JSON object:
+            Allowed "verdict" values (MUST be one of these exact 4 strings):
+            "CORRECT", "PARTIALLY_CORRECT", "INCORRECT", "NEEDS_CLARIFICATION"
+
+            Return strictly a JSON object (always use null for "explanationOfMistake" and "targetedHint" when verdict is "CORRECT"):
             {
               "verdict": "CORRECT",
               "scoreOutOfTen": 9,
-              "specificPraise": "What the student understood well",
+              "specificPraise": "Short, warm praise telling them what they got right in simple words",
               "explanationOfMistake": null,
               "targetedHint": null,
               "conceptCompleted": true,
@@ -375,23 +486,39 @@ class GeminiServiceImpl : GeminiService {
 
         try {
             val responseText = executeGeminiPrompt(apiKey, prompt, emptyList())
-            val jsonClean = extractJsonString(responseText)
-            val jsonRoot = JSONObject(jsonClean)
-
-            val verdictStr = jsonRoot.optString("verdict", "CORRECT").uppercase()
-            val verdict = runCatching { EvaluationVerdict.valueOf(verdictStr) }.getOrDefault(
-                if (jsonRoot.optInt("scoreOutOfTen", 8) >= 8) EvaluationVerdict.CORRECT else EvaluationVerdict.PARTIALLY_CORRECT
+            val jsonRoot = parseJsonWithRegeneration(
+                apiKey = apiKey,
+                rawResponse = responseText,
+                schemaHint = """{"verdict": String, "scoreOutOfTen": Int, "specificPraise": String, "explanationOfMistake": String?, "targetedHint": String?, "conceptCompleted": Boolean, "allowsRetry": Boolean}"""
             )
+
+            val verdictStr = jsonRoot.optString("verdict", "CORRECT").trim().uppercase().replace(" ", "_")
+            val score = jsonRoot.optInt("scoreOutOfTen", 8)
+            val verdict = runCatching { EvaluationVerdict.valueOf(verdictStr) }.getOrElse {
+                when {
+                    "CLARIF" in verdictStr || "PRACTICE" in verdictStr || "HELP" in verdictStr -> EvaluationVerdict.NEEDS_CLARIFICATION
+                    "PARTIAL" in verdictStr -> EvaluationVerdict.PARTIALLY_CORRECT
+                    "INCORRECT" in verdictStr || "WRONG" in verdictStr -> EvaluationVerdict.INCORRECT
+                    score >= 8 -> EvaluationVerdict.CORRECT
+                    score <= 4 -> EvaluationVerdict.NEEDS_CLARIFICATION
+                    else -> EvaluationVerdict.PARTIALLY_CORRECT
+                }
+            }
 
             val isCompleted = jsonRoot.optBoolean("conceptCompleted", verdict == EvaluationVerdict.CORRECT || attemptNumber >= 2)
             val canRetry = jsonRoot.optBoolean("allowsRetry", !isCompleted && attemptNumber < 2)
 
+            val rawMistake = jsonRoot.optString("explanationOfMistake", "").trim()
+            val rawHint = jsonRoot.optString("targetedHint", "").trim()
+            val cleanMistake = if (verdict == EvaluationVerdict.CORRECT || rawMistake.isBlank() || rawMistake.equals("null", ignoreCase = true)) null else rawMistake
+            val cleanHint = if (verdict == EvaluationVerdict.CORRECT || rawHint.isBlank() || rawHint.equals("null", ignoreCase = true)) null else rawHint
+
             val eval = StructuredAnswerEvaluation(
                 verdict = verdict,
                 scoreOutOfTen = jsonRoot.optInt("scoreOutOfTen", if (verdict == EvaluationVerdict.CORRECT) 9 else 6),
-                specificPraise = jsonRoot.optString("specificPraise", "Good effort in reasoning through this concept."),
-                explanationOfMistake = jsonRoot.optString("explanationOfMistake", "").ifBlank { null },
-                targetedHint = jsonRoot.optString("targetedHint", "").ifBlank { null },
+                specificPraise = jsonRoot.optString("specificPraise", "Good effort! You shared a clear thought here."),
+                explanationOfMistake = cleanMistake,
+                targetedHint = cleanHint,
                 followUpActivity = null,
                 conceptCompleted = isCompleted,
                 allowsRetry = canRetry
@@ -402,7 +529,7 @@ class GeminiServiceImpl : GeminiService {
                 StructuredAnswerEvaluation(
                     verdict = EvaluationVerdict.CORRECT,
                     scoreOutOfTen = 8,
-                    specificPraise = "You demonstrated solid conceptual understanding in your explanation.",
+                    specificPraise = "Nice try! You explained your answer clearly in your own words.",
                     explanationOfMistake = null,
                     targetedHint = null,
                     followUpActivity = null,
@@ -420,55 +547,104 @@ class GeminiServiceImpl : GeminiService {
         classLevel: String,
         currentConceptTitle: String,
         currentActivityQuestion: String,
-        studentQuery: String
+        studentQuery: String,
+        currentConceptExplanation: String?,
+        conversationHistory: List<Pair<String, String>>
     ): GeminiResult<TutorInterruptionResponse> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
             return@withContext GeminiResult.Error("API key missing.", isKeyMissing = true)
         }
 
+        val historyBlock = if (conversationHistory.isEmpty()) {
+            "None yet."
+        } else {
+            conversationHistory.takeLast(3).joinToString("\n") { (q, a) ->
+                "- Student asked: \"$q\"\n  Bunde replied: \"$a\""
+            }
+        }
+
         val prompt = """
-            You are Bunde, an active personal tutor.
-            The student interrupted the structured lesson to ask this question:
-            "$studentQuery"
+            The $classLevel student paused the lesson to ask you a follow-up question:
+            Student Question: "$studentQuery"
 
             Lesson Context:
             - Subject: $subject
             - Topic: $topic
             - Current Concept: $currentConceptTitle
-            - Pending Activity Challenge: $currentActivityQuestion
+            - What You Already Explained: ${currentConceptExplanation ?: "Teaching $currentConceptTitle in $topic"}
+            - Active Question Waiting for Student: $currentActivityQuestion
+            - Earlier Questions in This Step:
+            $historyBlock
 
-            INSTRUCTIONS:
-            1. Answer the student's question directly, accurately, and simply in 2 to 3 sentences.
-            2. Connect the explanation back to $currentConceptTitle.
-            3. Provide a natural bridge sentence that guides them back to the active challenge.
+            HOW TO ANSWER FOLLOW-UP QUESTIONS (CRITICAL):
+            1. Keep the EXACT SAME simple, everyday SS2 teacher English. Never switch back to textbook language.
+            2. Adapt directly to what the student needs:
+               - If they say they don't understand or are confused -> explain it in MUCH simpler everyday words with a fresh, relatable example. NEVER repeat the same complicated sentences from earlier.
+               - If they ask what a word means -> give the clear everyday meaning of that exact word first, plus a short example sentence.
+               - If they ask for more details or "why?" -> give a deeper explanation while keeping words simple and sentences short.
+            3. Keep "explanation" short and clear (2 to 4 short sentences). Keep all exam facts accurate.
+            4. Write a warm, natural 1-sentence "bridgeBackToLesson" guiding them smoothly back to the question waiting for them.
 
             Return strictly a JSON object:
             {
-              "explanation": "Direct answer to the student's question",
-              "bridgeBackToLesson": "Bridge sentence connecting back to the current challenge"
+              "explanation": "Simple, clear answer in everyday English that directly helps the student",
+              "bridgeBackToLesson": "One short, friendly sentence guiding them back to the question"
             }
         """.trimIndent()
 
         try {
             val responseText = executeGeminiPrompt(apiKey, prompt, emptyList())
-            val jsonClean = extractJsonString(responseText)
-            val jsonRoot = JSONObject(jsonClean)
+            val jsonRoot = parseJsonWithRegeneration(
+                apiKey = apiKey,
+                rawResponse = responseText,
+                schemaHint = """{"explanation": String, "bridgeBackToLesson": String}"""
+            )
             val resp = TutorInterruptionResponse(
-                explanation = jsonRoot.optString("explanation", "In $subject, $currentConceptTitle directly addresses this."),
-                bridgeBackToLesson = jsonRoot.optString("bridgeBackToLesson", "Now let's apply this to our current challenge!")
+                explanation = jsonRoot.optString("explanation", "In $subject, $currentConceptTitle simply means how this idea works in everyday life."),
+                bridgeBackToLesson = jsonRoot.optString("bridgeBackToLesson", "Now try the question below when you feel ready!")
             )
             GeminiResult.Success(resp)
         } catch (e: Exception) {
             GeminiResult.Success(
                 TutorInterruptionResponse(
-                    explanation = "That's a helpful question! In $subject, this ties directly to $currentConceptTitle.",
-                    bridgeBackToLesson = "Let's return to the challenge when you're ready."
+                    explanation = "Good question! In $topic, ${cleanHeading(currentConceptTitle)} is about the main idea we just looked at—try picturing it in a real everyday situation.",
+                    bridgeBackToLesson = "When you feel ready, go ahead and try the question below."
                 )
             )
         }
     }
 
-    private fun executeGeminiPrompt(apiKey: String, prompt: String, imageBytesList: List<ByteArray>): String {
+    /**
+     * Parses Gemini JSON robustly and runs one regeneration/recovery prompt if formatting broke.
+     */
+    private fun parseJsonWithRegeneration(
+        apiKey: String,
+        rawResponse: String,
+        schemaHint: String
+    ): JSONObject {
+        val cleaned = extractJsonString(rawResponse)
+        return try {
+            JSONObject(cleaned)
+        } catch (_: Exception) {
+            val recoveryPrompt = """
+                Fix the text below into a valid JSON object matching this schema: $schemaHint
+                Keep all explanations in very simple, everyday English for an SS2 secondary school student.
+                Return ONLY valid JSON with no extra text.
+
+                Text to fix:
+                $rawResponse
+            """.trimIndent()
+            val regenerated = executeGeminiPrompt(apiKey, recoveryPrompt, emptyList())
+            JSONObject(extractJsonString(regenerated))
+        }
+    }
+
+    private fun executeGeminiPrompt(
+        apiKey: String,
+        prompt: String,
+        imageBytesList: List<ByteArray>,
+        expectJson: Boolean = true
+    ): String {
         var lastException: Exception? = null
 
         for (modelName in candidateModels) {
@@ -491,13 +667,23 @@ class GeminiServiceImpl : GeminiService {
                 }
 
                 val payload = JSONObject().apply {
+                    put("system_instruction", JSONObject().apply {
+                        put("parts", JSONArray().apply {
+                            put(JSONObject().apply {
+                                put("text", GLOBAL_TUTOR_SYSTEM_INSTRUCTION)
+                            })
+                        })
+                    })
                     put("contents", JSONArray().apply {
                         put(JSONObject().apply {
                             put("parts", partsArray)
                         })
                     })
                     put("generationConfig", JSONObject().apply {
-                        put("temperature", 0.3)
+                        put("temperature", 0.35)
+                        if (expectJson) {
+                            put("responseMimeType", "application/json")
+                        }
                     })
                 }
 
@@ -510,7 +696,7 @@ class GeminiServiceImpl : GeminiService {
                     response.close()
                     val ex = IOException("Gemini API error code ${response.code}: $errorBody")
                     lastException = ex
-                    if (response.code == 404) {
+                    if (response.code == 404 || response.code == 400) {
                         continue
                     } else {
                         throw ex
@@ -531,7 +717,7 @@ class GeminiServiceImpl : GeminiService {
                 }
             } catch (e: Exception) {
                 lastException = e
-                if (e.message?.contains("404") != true) {
+                if (e.message?.contains("404") != true && e.message?.contains("400") != true) {
                     throw e
                 }
             }
@@ -540,14 +726,31 @@ class GeminiServiceImpl : GeminiService {
         throw lastException ?: IOException("Failed to reach Gemini API. Please check your key or internet connection.")
     }
 
-    private fun extractJsonString(raw: String): String {
+    private fun cleanHeading(raw: String): String {
         val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return trimmed
+        val letters = trimmed.filter { it.isLetter() }
+        val isAllCaps = letters.isNotEmpty() && letters.all { it.isUpperCase() }
+        return if (isAllCaps) {
+            trimmed.lowercase().replaceFirstChar { it.uppercase() }
+        } else {
+            trimmed
+        }
+    }
+
+    private fun extractJsonString(raw: String): String {
+        var trimmed = raw.trim()
         if (trimmed.startsWith("```json")) {
-            return trimmed.removePrefix("```json").substringBeforeLast("```").trim()
+            trimmed = trimmed.removePrefix("```json").substringBeforeLast("```").trim()
+        } else if (trimmed.startsWith("```")) {
+            trimmed = trimmed.removePrefix("```").substringBeforeLast("```").trim()
         }
-        if (trimmed.startsWith("```")) {
-            return trimmed.removePrefix("```").substringBeforeLast("```").trim()
+        val firstBrace = trimmed.indexOf('{')
+        val lastBrace = trimmed.lastIndexOf('}')
+        return if (firstBrace != -1 && lastBrace > firstBrace) {
+            trimmed.substring(firstBrace, lastBrace + 1)
+        } else {
+            trimmed
         }
-        return trimmed
     }
 }

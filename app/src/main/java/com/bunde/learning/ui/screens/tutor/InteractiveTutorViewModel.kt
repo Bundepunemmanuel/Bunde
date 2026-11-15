@@ -124,6 +124,14 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
                 errorMessage = null
             )
 
+            val hasUploadedNotes = map.subtopics.any { it.isFromUploadedNotes }
+            val notesContext = when {
+                hasUploadedNotes && !map.unreadableNoteNotice.isNullOrBlank() ->
+                    "${map.summary} (Note issue: ${map.unreadableNoteNotice})"
+                hasUploadedNotes -> map.summary
+                else -> null
+            }
+
             val result = gemini.generateStructuredConceptStep(
                 apiKey = apiKey,
                 subject = map.subject,
@@ -136,7 +144,7 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
                 conceptIndex = index,
                 totalConcepts = map.subtopics.size,
                 previouslyTaughtConcepts = _uiState.value.previouslyTaughtConcepts,
-                uploadedNotesSummary = map.unreadableNoteNotice,
+                uploadedNotesSummary = notesContext,
                 struggleCount = _uiState.value.struggleCount,
                 recentlyUsedActivityTypes = _uiState.value.recentlyUsedActivityTypes
             )
@@ -153,19 +161,19 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
                     )
                 }
                 is GeminiResult.Error -> {
-                    // Safe, verified local fallback
+                    // Safe, simple-English local recovery
                     val fallbackActivity = StructuredActivity(
                         type = "SCENARIO",
-                        question = "In ${map.subject}, what is the fundamental purpose of ${concept.title}?",
+                        question = "In your own words, why is ${concept.title} important in ${map.topicName}?",
                         options = emptyList(),
                         expectedAnswerCriteria = concept.shortSummary,
-                        hint = "Focus on why ${concept.title} is applied."
+                        hint = "Think back to the main idea about ${concept.title} we just read."
                     )
                     val fallbackStep = StructuredConceptStep(
                         conceptId = concept.id,
                         learningObjective = "Understand ${concept.title}",
-                        conciseExplanation = "${concept.title} is an essential component of ${map.topicName}.\n\nSpecifically: ${concept.shortSummary}",
-                        concreteExample = "In practical applications of ${map.subject}, understanding this concept ensures accurate analysis.",
+                        conciseExplanation = "Let's look at ${concept.title} in ${map.topicName}.\n\nIn simple words: ${concept.shortSummary}",
+                        concreteExample = "Think of an everyday example at school or at home where ${concept.title} is used. That helps make the main idea easy to remember.",
                         activity = fallbackActivity
                     )
                     _uiState.value = _uiState.value.copy(
@@ -247,11 +255,11 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
                     }
                 }
                 is GeminiResult.Error -> {
-                    // Safe recovery: accept answer with supportive feedback
+                    // Safe recovery: accept answer with warm, simple feedback
                     val fallbackEval = StructuredAnswerEvaluation(
                         verdict = EvaluationVerdict.CORRECT,
                         scoreOutOfTen = 8,
-                        specificPraise = "You demonstrated clear understanding of the core concept.",
+                        specificPraise = "Nice try! You explained the main idea clearly in your own words.",
                         explanationOfMistake = null,
                         targetedHint = null,
                         conceptCompleted = true,
@@ -355,6 +363,9 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isInterruptionLoading = true)
 
+            val currentExplanation = state.currentStep?.conciseExplanation
+            val history = state.interruptions.map { it.studentQuery to it.tutorExplanation }
+
             val result = gemini.handleTutorInterruption(
                 apiKey = apiKey,
                 subject = map.subject,
@@ -362,7 +373,9 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
                 classLevel = map.classLevel,
                 currentConceptTitle = currentConcept,
                 currentActivityQuestion = currentQuestion,
-                studentQuery = trimmed
+                studentQuery = trimmed,
+                currentConceptExplanation = currentExplanation,
+                conversationHistory = history
             )
 
             val item = when (result) {
@@ -375,8 +388,8 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
                 is GeminiResult.Error -> TutorInterruptionItem(
                     id = "intr_${System.currentTimeMillis()}",
                     studentQuery = trimmed,
-                    tutorExplanation = "Regarding '$trimmed': in ${map.subject}, $currentConcept focuses on how this principle operates directly.",
-                    bridgeBack = "Let's return to the challenge when you're ready."
+                    tutorExplanation = "Good question! Think about \"$trimmed\" as a simple part of $currentConcept—try picturing a real everyday example of how it works.",
+                    bridgeBack = "When you feel ready, go ahead and try the question below."
                 )
                 is GeminiResult.Loading -> null
             }

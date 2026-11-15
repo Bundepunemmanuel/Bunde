@@ -318,13 +318,43 @@ fun ExplanationSection(step: StructuredConceptStep, conceptIndex: Int) {
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Concise, readable explanation (2-3 paragraphs max)
+        // Concise, readable explanation (2-3 short paragraphs)
         Text(
             text = step.conciseExplanation,
             fontSize = 14.sp,
             color = BundeTextPrimary,
             lineHeight = 22.sp
         )
+
+        // Small "Meaning of key words" helper when exam/hard words are introduced
+        if (step.keyWordMeanings.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(BundeBackground)
+                    .border(1.dp, BundeBorder, RoundedCornerShape(8.dp))
+                    .padding(12.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Meaning of Key Words",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = BundeAccent
+                    )
+                    step.keyWordMeanings.forEach { item ->
+                        Text(
+                            text = "• ${item.word}: ${item.meaning}",
+                            fontSize = 13.sp,
+                            color = BundeTextPrimary,
+                            lineHeight = 19.sp
+                        )
+                    }
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(14.dp))
 
@@ -347,7 +377,7 @@ fun ExplanationSection(step: StructuredConceptStep, conceptIndex: Int) {
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Practical Example / Demonstration",
+                        text = "Relatable Example",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = BundeHighlight
