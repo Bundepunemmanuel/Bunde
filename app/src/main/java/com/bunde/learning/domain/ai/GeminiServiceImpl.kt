@@ -125,11 +125,11 @@ class GeminiServiceImpl : GeminiService {
             - Class Level: $classLevel
 
             RULES FOR THIS TOPIC MAP:
-            1. Break the topic into 4 to 8 small, easy-to-follow subtopics in logical teaching order (from basic idea to deeper parts).
-            2. Teach ONE small part per subtopic. For example, in History/CRS, put birth/saving, growing up, and later events as separate subtopics—never lump everything into one big heading.
+            1. Break the topic into 4 to 6 small, easy-to-follow subtopics in logical teaching order (from basic meaning to deeper parts).
+            2. Keep STRICT BOUNDARIES between subtopics so each step teaches something fresh without repeating earlier steps. For example, Part 1 ("What Popular Participation Means") should cover ONLY the core meaning and NOT spill Part 2's full list of types/forms. In History/CRS, put birth/saving, growing up, and later events as separate subtopics.
             3. Use simple, friendly headings in Title Case (like "What Privatization Means" or "How Moses Was Saved and Grew Up in the Palace"). NEVER use ALL-CAPS or research-paper titles.
             4. Keep "summary" to 2 short, clear sentences telling the student what this topic is about in everyday English.
-            5. Keep each subtopic's "shortSummary" to 1 plain-English sentence explaining the main fact or exam point.
+            5. Keep each subtopic's "shortSummary" to 1 plain-English sentence explaining the exact distinct exam focus of THAT subtopic.
             6. Include only subtopics that genuinely belong to $subject and $topic.
             7. Never confuse the topic name "$topic" with the student's name.
 
@@ -309,42 +309,53 @@ class GeminiServiceImpl : GeminiService {
         }
 
         val threadContext = if (previousStoryThread.isNullOrBlank()) {
-            "This is the opening episode—introduce a fresh, memorable real-life mini-story or character if helpful."
+            "This is Episode 1 — introduce ONE memorable everyday protagonist (like Tolu, Chidi, or Amina) facing an urgent real-life dilemma or surprising trap."
         } else {
-            "Continue smoothly from the previous episode/thread so the topic feels like one connected story: $previousStoryThread"
+            "This is Episode ${conceptIndex + 1} — continue the EXACT SAME protagonist's ongoing story right from this previous thread with a new twist or obstacle: $previousStoryThread"
+        }
+
+        val continuationRule = if (conceptIndex > 0) {
+            "CONTINUATION RULE (CRITICAL): Because Concepts 1..$conceptIndex already ran, DO NOT start \"conciseExplanation\" by re-defining \"$topic\" again (never open with \"$topic means...\"). Jump STRAIGHT into resolving the new \"storyHook\" and teaching ONLY \"$conceptTitle\"!"
+        } else {
+            "OPENING CONCEPT RULE: Define \"$topic\" clearly in plain words, but keep the focus ONLY on \"$conceptTitle\"—do NOT jump ahead and list forms/reasons/solutions meant for later parts."
         }
 
         val prompt = """
-            Teach ONE small concept to a $classLevel student so it sticks in memory like a movie scene:
+            Teach ONE small concept to a $classLevel student so it hooks their curiosity like a movie scene AND locks into long-term memory:
             - Subject: $subject
             - Topic: $topic
             - Class Level: $classLevel
             - Concept (${conceptIndex + 1} of $totalConcepts): $conceptTitle
             - Focus Area: $conceptCategory
             - Core Fact/Point to Teach: $conceptSummary
-            - Already Taught Earlier: ${if (previouslyTaughtConcepts.isEmpty()) "Nothing yet (this is the first concept)" else previouslyTaughtConcepts.joinToString(", ")}
+            - Already Covered Earlier (DO NOT re-teach or repeat): ${if (previouslyTaughtConcepts.isEmpty()) "Nothing yet (this is the first concept)" else previouslyTaughtConcepts.joinToString(", ")}
             - Story Continuity: $threadContext
             - Student Notes Context: ${uploadedNotesSummary ?: "Standard school syllabus"}
             - Recently Used Question Types (try to pick a fresh one): ${recentlyUsedActivityTypes.joinToString(", ").ifEmpty { "None" }}
             - $adaptiveNote
+            - $continuationRule
 
-            HOW TO MAKE THIS CONCEPT UNFORGETTABLE (FOLLOW EVERY RULE):
-            1. ZERO GREETINGS OR FILLER: Start straight with the teaching. No "Hello", "Welcome", or "Today we will learn".
+            HOW TO MAKE THIS HOLD CURIOSITY & STICK IN MEMORY (FOLLOW EVERY RULE):
+            1. ZERO GREETINGS OR FILLER: Start straight with the teaching. No "Hello", "Welcome", or "Today we will learn". No raw markdown asterisks (**).
             2. LEARNING OBJECTIVE ("learningObjective"): 1 short, plain-English line spoken directly TO the student (e.g. "Learn why a company is treated like its own legal person", no ALL-CAPS).
             3. CONSISTENT CHARACTERS ACROSS THE LESSON:
-               - Use the EXACT SAME 1 or 2 recurring character names introduced in "storyHook" (or carried over from Story Continuity above) inside "storyHook", "concreteExample", and "activity".
-               - NEVER invent unrelated new character names inside the same concept step.
-            4. MINI-STORY HOOK ("storyHook"):
-               - Write 1 to 2 vivid, curious sentences putting your recurring character(s) in a concrete situation BEFORE giving the textbook term.
-               - Example: "Chidi and Musa register a bread bakery together. One day, the bakery owes 300,000 Naira for flour—can the supplier take Musa's personal phone to pay the debt?"
-            5. GUESS FIRST ("predictionPrompt" & "predictionOptions"):
-               - If guessing before reading wakes up curiosity (great for concepts, decisions, causes, science predictions, or scenarios), write a short 1-sentence guess question and 2 or 3 very short guess choices (e.g. ["Yes, Musa must pay from his pocket", "No, only the company pays", "Only if Chidi agrees"]).
-               - If this step is a pure math formula or step-by-step calculation where guessing doesn't fit, set "predictionPrompt": null and "predictionOptions": [].
+               - Use the EXACT SAME 1 or 2 recurring character names introduced in "storyHook" (or carried over from Story Continuity above) inside "storyHook", "concreteExample", "memoryPicture", and "activity".
+               - NEVER switch to unrelated characters like "traders in a market" inside the same lesson.
+            4. CURIOSITY-LOOP STORY HOOK ("storyHook"):
+               - Write 1 to 2 tense, intriguing sentences putting your protagonist in an UNRESOLVED DILEMMA, unfair trap, ticking clock, or surprising disagreement BEFORE giving the textbook answer.
+               - NEVER spoil the solution or summarize what the character wisely decided ("so she called a meeting and fixed it" = BAD). Leave the question wide open so the student NEEDS to find out what happens!
+               - Example: "Chidi and Musa's bakery owes ₦300,000 for flour—and the angry supplier arrives with police to seize Musa's personal motorcycle. Can the police legally take Musa's bike, or does a registered business have a hidden shield?"
+            5. GENUINE GUESS FIRST + PAYOFF ("predictionPrompt", "predictionOptions", "predictionReveal"):
+               - Write a short 1-sentence prediction question with real tension, and 2 or 3 PLAUSIBLE choices grounded in realistic student misconceptions, tempting shortcuts, or tough trade-offs.
+               - NEVER write cartoonishly obvious joke options (like "Leave the country" or "Leaders automatically fix everything"), and NEVER copy the textbook list into one option!
+               - Write a punchy 1-2 sentence "predictionReveal" (e.g. "Twist: taking that quiet deal backfires—here is why...") that immediately pays off the student's guess right before the explanation.
+               - Only set "predictionPrompt": null, "predictionOptions": [], and "predictionReveal": null if this step is pure math calculation steps where guessing does not fit.
             6. SIMPLE EXPLANATION & FULL EXAM BREADTH ("conciseExplanation"):
-               - Write 2 to 3 very short, friendly paragraphs (2 to 3 short sentences per paragraph) that directly answer the hook and teach the complete exam content.
-               - IMPORTANT: If this concept covers multiple causes, reasons, types, features, stages, advantages, or functions, include ALL 3 to 5 key exam points concisely (use clean short bullet lines inside the explanation so the student gets full exam marks). Never stop at just 1 point when exams expect 3–5 points!
-               - Explain any hard or exam word immediately right after using it in everyday English.
-               - Keep accurate facts, dates, names, and formulas. Adapt naturally to $subject.
+               - Open by directly answering the hook/dilemma (NO repeating "$topic means..." on Concept 2+).
+               - Write 2 to 3 short, natural paragraphs (2–3 sentences each).
+               - IMPORTANT FOR EXAM MARKS: When this concept covers multiple points (causes, forms/types, importance, ways, stages, features), cover ALL 3 to 5 major SS2 exam categories/points concisely (e.g., for Forms of Popular Participation include Political, Economic, and Civic/Social/Community forms—not just voting!).
+               - Format bullet points cleanly as "• Term — Plain explanation" (never repeat the term twice like "Accountability: Accountability means..." and never use **bold** markers).
+               - Explain any hard word immediately in everyday English.
             7. HYBRID VISUAL AID ("visualAid"):
                - Choose the best visual type for THIS specific concept:
                  * "NONE": When a visual adds no real learning value (e.g., grammar rules, vocabulary, short definitions, or pure story concepts). Set "svgMarkup": null, "imagePrompt": null.
@@ -357,17 +368,17 @@ class GeminiServiceImpl : GeminiService {
                    - NEVER use <script>, <foreignObject>, external links, or unescaped "&" characters.
                  * "GENERATED_IMAGE": Best ONLY when a rich real-world scene, natural phenomenon, historical setting, landform, or ecosystem builds stronger visual memory than boxes/arrows (e.g. river meander, volcano cross-section scene, savannah food web habitat). Set "svgMarkup": null and write a clear 1-2 sentence educational illustration description in "imagePrompt".
             8. MEANING OF KEY WORDS ("keyWordMeanings"):
-               - List 0 to 3 important exam or hard words from this step with their simple 1-sentence meanings.
+               - List 0 to 3 important exam words from this step with simple 1-sentence meanings (do NOT start the meaning with the word itself).
             9. MOVIE-SCENE EXAMPLE ("concreteExample"):
-               - Write 1 vivid mini-scene continuing with the SAME character(s) from the hook (or a clear step-by-step worked example for Math/Science) that makes the idea easy to picture.
-            10. PICTURE THIS MEMORY ANCHOR ("memoryPicture"):
-                - Write 1 memorable, easy-to-picture mental image tying the term to the scene (e.g., "Picture a registered company like a separate invisible person holding its own wallet—separate from the owners' pockets.").
-            11. NEXT-EPISODE THREAD ("storyThreadSummary"):
-                - Write 1 short sentence summarizing the story, recurring character(s), and key idea so the next concept continues the same story seamlessly.
+               - Write 1 vivid follow-through scene showing what happens next to your SAME character(s) after they apply this idea (or a clear worked calculation for Math/Science).
+            10. MEMORY STORAGE SYSTEM ("memoryPicture" & "memoryHook"):
+                - "memoryPicture": BANNED cliché stock metaphors ("puzzle piece", "three-legged stool", "giant mirror"). Instead, paint a VIVID, UNUSUAL, SENSORY mental movie starring your character where each weird/memorable detail literally stands for an exam point (e.g. "Picture Tolu handing the chairman a giant receipt book (Accountability), ringing a peace bell (Peace), wearing a hat with 100 faces (Representation), and unlocking a bright clinic door (Development)").
+                - "memoryHook": If this step has 3–5 exam points or categories to recall in an exam, give ONE short, punchy memory key or acronym (e.g. "P.A.R.D. = Peace, Accountability, Representation, Development" or "3 Ways: Ballot, Party, Civic Action"). Otherwise set null.
+            11. NEXT-EPISODE CLIFFHANGER THREAD ("storyThreadSummary"):
+                - Write 1 short sentence summarizing what your protagonist just discovered AND teasing the next hurdle (e.g., "Tolu knows her rights, but election day is 3 years away while a bad market tax starts tomorrow.").
             12. NON-OVERLAPPING CHECK QUESTION ("activity"):
-                - Ask ONE clear, direct question in simple English that tests this exact concept.
-                - IMPORTANT: If you included a "predictionPrompt" above, "activity.question" MUST test a DIFFERENT, deeper, or applied angle (such as applying the rule to a new twist, explaining why, identifying all causes/parts, comparing/contrasting cases, or spotting a mistake). NEVER repeat or rephrase the Guess First question, and NEVER let both ask to name the same term!
-                - Keep using the same recurring character(s) where a scenario is used.
+                - Ask ONE clear, applied question involving the SAME protagonist that tests the SPECIFIC exam points/categories taught in "conciseExplanation".
+                - STRICT NON-OVERLAP: Compare your "activity.question" to "predictionPrompt". It MUST NOT test the same cause-and-effect, reverse/negative version of "predictionPrompt", or name the same basic term! (For example, if predictionPrompt asked what happens when citizens stay silent, activity MUST test applying a specific concept like Accountability or distinguishing two types/benefits.)
                 - NEVER ask generic questions like "What did you learn?", "Do you understand?", or "Explain this in your own words."
                 - Choose from: "SCENARIO", "ERROR_DETECTION", "PREDICTION", "STEP_SOLVE", "COMPARISON", "CAUSE_EFFECT", or "CALCULATION".
 
@@ -375,10 +386,11 @@ class GeminiServiceImpl : GeminiService {
             {
               "conceptId": "$conceptId",
               "learningObjective": "Short plain-English goal for this step",
-              "storyHook": "1-2 sentence relatable mini-scene or curiosity dilemma.",
-              "predictionPrompt": "Short 1-sentence question asking the student to guess before reading (or null)",
-              "predictionOptions": ["Short guess A", "Short guess B"],
-              "conciseExplanation": "2-3 short paragraphs (and concise numbered/bulleted exam points if covering multiple causes/types/features) in everyday English.",
+              "storyHook": "1-2 sentence open-loop dilemma or surprising conflict starring your protagonist (do NOT spoil the answer).",
+              "predictionPrompt": "Short 1-sentence genuine dilemma/guess question before reading (or null)",
+              "predictionOptions": ["Plausible misconception/tempting option A", "Plausible option B"],
+              "predictionReveal": "1-2 punchy sentences revealing the twist/outcome of the guess right before teaching (or null)",
+              "conciseExplanation": "2-3 short paragraphs (and clean '• Point — Explanation' exam bullets when multiple points apply). Do NOT re-define $topic on Concept 2+.",
               "visualAid": {
                 "type": "NONE",
                 "title": "",
@@ -389,15 +401,16 @@ class GeminiServiceImpl : GeminiService {
               "keyWordMeanings": [
                 {
                   "word": "Important Term",
-                  "meaning": "Simple everyday meaning of this word."
+                  "meaning": "Simple everyday meaning without repeating the word at the start."
                 }
               ],
-              "concreteExample": "One vivid, relatable mini-scene (same characters) or step-by-step worked example.",
-              "memoryPicture": "One short mental picture so the student never forgets this concept.",
-              "storyThreadSummary": "One short sentence connecting this episode and its characters to the next concept.",
+              "concreteExample": "One vivid scene showing the same protagonist applying the idea.",
+              "memoryPicture": "One vivid, concrete mental movie encoding the exam points (NO clichés like puzzle pieces or stools).",
+              "memoryHook": "Short acronym or sticky 3-8 word memory key for multi-point exam lists (or null)",
+              "storyThreadSummary": "One short sentence linking this episode and teasing the next challenge.",
               "activity": {
                 "type": "SCENARIO",
-                "question": "One short, clear question testing a fresh/applied angle of this concept",
+                "question": "One short, applied question starring the same protagonist and testing a distinct angle from predictionPrompt",
                 "options": [],
                 "expectedAnswerCriteria": "Simple summary of the key idea the student should give",
                 "hint": "A gentle, plain-English clue if the student gets stuck"
@@ -410,7 +423,7 @@ class GeminiServiceImpl : GeminiService {
             val jsonRoot = parseJsonWithRegeneration(
                 apiKey = apiKey,
                 rawResponse = responseText,
-                schemaHint = """{"conceptId": String, "learningObjective": String, "storyHook": String?, "predictionPrompt": String?, "predictionOptions": [String], "conciseExplanation": String, "visualAid": {"type": String, "title": String, "caption": String, "svgMarkup": String?, "imagePrompt": String?}, "keyWordMeanings": [{"word": String, "meaning": String}], "concreteExample": String, "memoryPicture": String?, "storyThreadSummary": String?, "activity": {"type": String, "question": String, "options": [String], "expectedAnswerCriteria": String, "hint": String}}"""
+                schemaHint = """{"conceptId": String, "learningObjective": String, "storyHook": String?, "predictionPrompt": String?, "predictionOptions": [String], "predictionReveal": String?, "conciseExplanation": String, "visualAid": {"type": String, "title": String, "caption": String, "svgMarkup": String?, "imagePrompt": String?}, "keyWordMeanings": [{"word": String, "meaning": String}], "concreteExample": String, "memoryPicture": String?, "memoryHook": String?, "storyThreadSummary": String?, "activity": {"type": String, "question": String, "options": [String], "expectedAnswerCriteria": String, "hint": String}}"""
             )
             val actObj = jsonRoot.optJSONObject("activity") ?: JSONObject()
 
@@ -455,7 +468,9 @@ class GeminiServiceImpl : GeminiService {
 
             val rawHook = jsonRoot.optString("storyHook", "").trim()
             val rawPredPrompt = jsonRoot.optString("predictionPrompt", "").trim()
+            val rawPredReveal = jsonRoot.optString("predictionReveal", "").trim()
             val rawMemPic = jsonRoot.optString("memoryPicture", "").trim()
+            val rawMemHook = jsonRoot.optString("memoryHook", "").trim()
             val rawThread = jsonRoot.optString("storyThreadSummary", "").trim()
 
             val visualObj = jsonRoot.optJSONObject("visualAid")
@@ -488,14 +503,16 @@ class GeminiServiceImpl : GeminiService {
             val step = StructuredConceptStep(
                 conceptId = jsonRoot.optString("conceptId", conceptId),
                 learningObjective = cleanHeading(jsonRoot.optString("learningObjective", "Understand $conceptTitle")),
-                conciseExplanation = jsonRoot.optString("conciseExplanation", conceptSummary),
-                concreteExample = jsonRoot.optString("concreteExample", "Think of how $conceptTitle shows up in everyday life around you."),
+                conciseExplanation = jsonRoot.optString("conciseExplanation", conceptSummary).replace("**", ""),
+                concreteExample = jsonRoot.optString("concreteExample", "Think of how $conceptTitle shows up in everyday life around you.").replace("**", ""),
                 activity = activity,
                 keyWordMeanings = wordMeanings,
                 storyHook = if (rawHook.isBlank() || rawHook.equals("null", ignoreCase = true)) null else rawHook,
                 predictionPrompt = if (rawPredPrompt.isBlank() || rawPredPrompt.equals("null", ignoreCase = true) || predOptionsList.isEmpty()) null else rawPredPrompt,
                 predictionOptions = predOptionsList,
+                predictionReveal = if (rawPredReveal.isBlank() || rawPredReveal.equals("null", ignoreCase = true)) null else rawPredReveal,
                 memoryPicture = if (rawMemPic.isBlank() || rawMemPic.equals("null", ignoreCase = true)) null else rawMemPic,
+                memoryHook = if (rawMemHook.isBlank() || rawMemHook.equals("null", ignoreCase = true)) null else rawMemHook,
                 storyThreadSummary = if (rawThread.isBlank() || rawThread.equals("null", ignoreCase = true)) null else rawThread,
                 visualAid = parsedVisualAid
             )
@@ -729,19 +746,20 @@ class GeminiServiceImpl : GeminiService {
         }
 
         val prompt = """
-            Give a 30-second "Story So Far" memory recap for a $classLevel student who just completed 3 concepts in $subject ($topic):
+            Give a 30-second "Previously On..." story recap for a $classLevel student who just finished 3 episodes in $subject ($topic):
             - Concepts Covered: ${completedConcepts.takeLast(3).joinToString(", ")}
-            - Latest Story Thread: ${latestStoryThread ?: "Connected lessons in $topic"}
+            - Latest Story Thread & Character: ${latestStoryThread ?: "Connected lessons in $topic"}
 
-            RULES:
-            1. Write 2 to 3 short, friendly sentences in simple English connecting what they learned like a quick "Previously on..." movie recap.
-            2. Add 1 short memory tip reminding them why pausing or picturing the scene helps them remember for exams.
+            RULES (CRITICAL):
+            1. Extract the EXACT protagonist name from "Latest Story Thread & Character" above and keep using that exact name. NEVER switch to a different name!
+            2. Write 2 to 3 punchy movie-recap sentences in everyday English showing how those 3 concepts actually played out in that character's story ("Previously in [Character]'s story: first... then...").
+            3. In "quickTip", give ONE 5-second active recall cue asking the student to close their eyes for a moment and replay the 3 scenes or repeat the memory keys before moving on.
 
             Return strictly JSON:
             {
-              "recapTitle": "Short friendly title like 'Story So Far'",
-              "storySoFar": "2-3 short connected sentences summarizing the ideas covered.",
-              "quickTip": "1 short encouraging sentence about pausing to lock the ideas in."
+              "recapTitle": "Previously in [Character]'s Story...",
+              "storySoFar": "2-3 short connected movie-recap sentences starring the exact protagonist from Latest Story Thread.",
+              "quickTip": "1 short active-recall mental-replay prompt to lock the 3 scenes in before continuing."
             }
         """.trimIndent()
 

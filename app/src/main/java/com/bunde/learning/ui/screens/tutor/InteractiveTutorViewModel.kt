@@ -358,7 +358,10 @@ class InteractiveTutorViewModel(application: Application) : AndroidViewModel(app
                             subtopicTitle = concept.title,
                             prompt = activity.question,
                             expectedAnswer = activity.expectedAnswerCriteria,
-                            memoryCue = step.memoryPicture ?: step.concreteExample,
+                            memoryCue = listOfNotNull(
+                                step.memoryHook?.let { "Memory Key: $it" },
+                                step.memoryPicture ?: step.concreteExample
+                            ).joinToString("\n").ifBlank { step.concreteExample },
                             intervalDays = if (evaluation.scoreOutOfTen >= 8) 3 else 1,
                             dueDate = System.currentTimeMillis() + (if (evaluation.scoreOutOfTen >= 8) 3 else 1) * 24 * 60 * 60 * 1000L,
                             isWeakArea = evaluation.scoreOutOfTen < 8

@@ -588,6 +588,15 @@ fun ExplanationSection(
                             color = BundeHighlight
                         )
                     }
+                    if (!step.predictionReveal.isNullOrBlank()) {
+                        Text(
+                            text = step.predictionReveal,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = BundeTextPrimary,
+                            lineHeight = 19.sp
+                        )
+                    }
                 }
             }
         }
@@ -679,8 +688,8 @@ fun ExplanationSection(
             }
         }
 
-        // Memory Picture Anchor
-        if (!step.memoryPicture.isNullOrBlank()) {
+        // Memory Picture & Storage Key Anchor
+        if (!step.memoryPicture.isNullOrBlank() || !step.memoryHook.isNullOrBlank()) {
             Spacer(modifier = Modifier.height(10.dp))
             Box(
                 modifier = Modifier
@@ -690,29 +699,48 @@ fun ExplanationSection(
                     .border(1.dp, BundeAccent.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
                     .padding(12.dp)
             ) {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Outlined.Visibility,
-                            contentDescription = "Picture This",
+                            contentDescription = "Lock It In Memory",
                             tint = BundeAccent,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Picture This (To Remember Easily)",
+                            text = "Lock It In Memory (Picture This)",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = BundeAccent
                         )
                     }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = step.memoryPicture,
-                        fontSize = 13.sp,
-                        color = BundeTextPrimary,
-                        lineHeight = 19.sp
-                    )
+                    if (!step.memoryPicture.isNullOrBlank()) {
+                        Text(
+                            text = step.memoryPicture,
+                            fontSize = 13.sp,
+                            color = BundeTextPrimary,
+                            lineHeight = 19.sp
+                        )
+                    }
+                    if (!step.memoryHook.isNullOrBlank()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(BundeSurface)
+                                .border(1.dp, BundeAccent.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 10.dp, vertical = 7.dp)
+                        ) {
+                            Text(
+                                text = "Memory Key: ${step.memoryHook}",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = BundeAccent,
+                                lineHeight = 18.sp
+                            )
+                        }
+                    }
                 }
             }
         }

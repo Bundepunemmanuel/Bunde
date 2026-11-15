@@ -127,7 +127,9 @@ data class StructuredConceptStep(
     val storyHook: String? = null,
     val predictionPrompt: String? = null,
     val predictionOptions: List<String> = emptyList(),
+    val predictionReveal: String? = null,
     val memoryPicture: String? = null,
+    val memoryHook: String? = null,
     val storyThreadSummary: String? = null,
     val visualAid: ConceptVisualAid = ConceptVisualAid()
 )
